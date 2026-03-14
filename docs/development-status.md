@@ -139,6 +139,17 @@
   - 모드 전환 안정성
 - 작은 수정사항은 실측 결과 기반으로만 반영
 
+### 4. USB-C HID OTG / 전원 / AI HAT 검토
+- Raspberry Pi 5의 `USB-C` 포트를 `HID OTG` 용도로 사용할 수 있는지 실기기에서 확인
+- `GPIO 전원 공급 + USB-C HID OTG` 동시 구성이 가능한지 확인
+- 장시간 동작 시 전원 안정성, 재부팅 여부, 발열 여부 확인
+- 추후 `AI HAT` 장착 시에도 위 구성이 유지 가능한지 확인
+- 검증 항목
+  - USB-C 연결 시 PC에서 HID keyboard / mouse 장치로 인식되는지
+  - GPIO 전원 공급만으로 Raspberry Pi 5가 안정적으로 부팅되는지
+  - `AI HAT + GPIO 전원 + USB-C HID OTG` 동시 구성 시 충돌이 없는지
+  - 실제 운영에 적합한 배선/전원 방식인지 판단
+
 ## 참고 메모
 - `2x2 = USB + black + black + black`
 - `FrameBuffer = UI 표시만, 현재 비활성`
