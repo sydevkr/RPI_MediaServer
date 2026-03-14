@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPI MediaServer - Remote Guard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎥 RPI MediaServer - Remote Guard</h1>
+            <div class="status" id="status">연결 중...</div>
+        </header>
+        
+        <div class="main-content">
+            <!-- 좌측: 비디오 플레이어 (2/3) -->
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="video-player" autoplay playsinline muted></video>
+                    <div class="video-overlay" id="video-overlay">
+                        <div class="stream-info" id="stream-info">
+                            <span id="current-mode">USB Camera</span>
+                            <span id="protocol-badge" class="badge rtsp">RTSP/HLS</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- WebRTC 전용 비디오 (숨겨짐, 필요시 표시) -->
+                <div id="webrtc-container" class="webrtc-container hidden">
+                    <iframe id="webrtc-frame" allowfullscreen></iframe>
+                </div>
+            </div>
+            
+            <!-- 우측: 설정 패널 (1/3) -->
+            <div class="control-panel">
+                <h2>⚙️ 설정</h2>
+                
+                <section class="control-section">
+                    <h3>스트리밍 프로토콜</h3>
+                    <div class="button-group">
+                        <button id="btn-hls" class="btn active" onclick="switchToHLS()">
+                            <span class="icon">📡</span>
+                            RTSP/HLS
+                        </button>
+                        <button id="btn-webrtc" class="btn" onclick="switchToWebRTC()">
+                            <span class="icon">🌐</span>
+                            WebRTC
+                        </button>
+                    </div>
+                </section>
+                
+                <section class="control-section">
+                    <h3>비디오 모드</h3>
+                    <div class="button-group vertical">
+                        <button id="btn-usb" class="btn mode-btn" onclick="switchMode('usb')">
+                            <span class="icon">📷</span>
+                            USB Camera
+                        </button>
+                        <button id="btn-screen" class="btn mode-btn" onclick="switchMode('screen')">
+                            <span class="icon">🖥️</span>
+                            Screen Capture
+                        </button>
+                        <button id="btn-csi" class="btn mode-btn" onclick="switchMode('csi')">
+                            <span class="icon">📹</span>
+                            CSI Camera
+                        </button>
+                        <button id="btn-hdmi" class="btn mode-btn" onclick="switchMode('hdmi')">
+                            <span class="icon">📺</span>
+                            HDMI Capture
+                        </button>
+                        <button id="btn-2x2" class="btn mode-btn" onclick="switchMode('2x2')">
+                            <span class="icon">🎛️</span>
+                            2×2 Mix
+                        </button>
+                    </div>
+                    <p class="hint">
+                        * Screen Capture는 Wayland + wf-recorder 필요<br>
+                        * 2×2 Mix는 현재 USB만 실제 입력, 나머지는 검은 화면
+                    </p>
+                </section>
+                
+                <section class="control-section">
+                    <h3>접속 정보</h3>
+                    <div class="info-box">
+                        <div class="info-row">
+                            <label>서버 IP:</label>
+                            <span id="server-ip">10.1.119.31</span>
+                        </div>
+                        <div class="info-row">
+                            <label>RTSP:</label>
+                            <code>rtsp://10.1.119.31:8554/live</code>
+                        </div>
+                        <div class="info-row">
+                            <label>HLS:</label>
+                            <code>http://10.1.119.31:8888/live</code>
+                        </div>
+                        <div class="info-row">
+                            <label>WebRTC:</label>
+                            <code>http://10.1.119.31:8889/live</code>
+                        </div>
+                    </div>
+                </section>
+                
+                <section class="control-section">
+                    <h3>스트림 상태</h3>
+                    <div class="stats" id="stats">
+                        <div class="stat-item">
+                            <span class="stat-label">프로토콜:</span>
+                            <span class="stat-value" id="stat-protocol">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">해상도:</span>
+                            <span class="stat-value" id="stat-resolution">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">비트레이트:</span>
+                            <span class="stat-value" id="stat-bitrate">-</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

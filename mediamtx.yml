@@ -1,0 +1,61 @@
+# MediaMTX configuration for RPi5 Remote Guard
+
+# Authentication settings - allow any user without password
+authInternalUsers:
+  - user: any
+    permissions:
+      - action: publish
+        path: live
+      - action: read
+        path: live
+authHTTPAddress: ""
+
+# RTSP server settings
+rtspAddress: :8554
+rtsp: true
+
+# RTP/RTCP settings
+rtpAddress: :8002
+rtcpAddress: :8003
+
+# RTMP (optional)
+rtmp: false
+
+# HLS (optional)
+hls: true
+hlsAddress: :8888
+hlsAllowOrigins: ['*']
+hlsAlwaysRemux: true
+hlsVariant: lowLatency
+
+# WebRTC (optional)
+webrtc: true
+webrtcAddress: :8889
+webrtcAllowOrigins: ['*']
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8190
+webrtcIPsFromInterfaces: true
+
+# Paths
+paths:
+  live:
+    source: publisher
+    record: false
+
+# Global settings
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 128
+
+# Logging
+logLevel: info
+logDestinations: [stdout]
+logFile: mediamtx.log
+
+# API (optional)
+api: false
+apiAddress: 127.0.0.1:9997
+
+# Metrics (optional)
+metrics: false
+pprof: false

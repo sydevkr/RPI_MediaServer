@@ -1,0 +1,3 @@
+/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles/RPI_MediaServer.dir
+/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles/edit_cache.dir
+/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles/rebuild_cache.dir
