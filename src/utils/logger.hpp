@@ -51,7 +51,7 @@ std::string to_str(T&& val) {
     using Decayed = typename std::decay<T>::type;
     if constexpr (std::is_same_v<Decayed, std::string>) {
         return std::forward<T>(val);
-    } else if constexpr (std::is_same_v<Decayed, const char*>) {
+    } else if constexpr (std::is_convertible_v<Decayed, const char*>) {
         return std::string(val);
     } else {
         return std::to_string(std::forward<T>(val));
@@ -68,7 +68,6 @@ template<typename... Args>
 std::string format_impl(const std::string& fmt, Args&&... args) {
     std::string result = fmt;
     std::string replacements[] = {to_str(std::forward<Args>(args))...};
-    size_t idx = 0;
     size_t pos = 0;
     
     // C++17 fold expression 대신 루프 사용

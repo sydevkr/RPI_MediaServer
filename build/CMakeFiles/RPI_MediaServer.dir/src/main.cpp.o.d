@@ -226,7 +226,12 @@ CMakeFiles/RPI_MediaServer.dir/src/main.cpp.o: \
  /usr/include/c++/14/ctime /usr/include/c++/14/bits/parse_numbers.h \
  /usr/include/c++/14/atomic /usr/include/c++/14/mutex \
  /usr/include/c++/14/bits/std_mutex.h \
- /usr/include/c++/14/bits/unique_lock.h \
+ /usr/include/c++/14/bits/unique_lock.h /usr/include/c++/14/chrono \
+ /usr/include/c++/14/fstream /usr/include/c++/14/bits/codecvt.h \
+ /usr/include/aarch64-linux-gnu/c++/14/bits/basic_file.h \
+ /usr/include/aarch64-linux-gnu/c++/14/bits/c++io.h \
+ /usr/include/c++/14/bits/fstream.tcc /usr/include/c++/14/sstream \
+ /usr/include/c++/14/bits/sstream.tcc \
  /home/sypark/my_code/RPI_MediaServer/src/pipeline/pipeline.hpp \
  /usr/include/aarch64-linux-gnu/libavcodec/avcodec.h \
  /usr/include/aarch64-linux-gnu/libavutil/samplefmt.h \
@@ -331,23 +336,22 @@ CMakeFiles/RPI_MediaServer.dir/src/main.cpp.o: \
  /usr/include/c++/14/bits/stl_bvector.h \
  /usr/include/c++/14/bits/vector.tcc \
  /home/sypark/my_code/RPI_MediaServer/src/utils/config.hpp \
+ /usr/include/c++/14/utility /usr/include/c++/14/bits/stl_relops.h \
  /home/sypark/my_code/RPI_MediaServer/src/utils/logger.hpp \
- /usr/include/c++/14/chrono /usr/include/c++/14/iomanip \
- /usr/include/c++/14/locale \
+ /usr/include/c++/14/iomanip /usr/include/c++/14/locale \
  /usr/include/c++/14/bits/locale_facets_nonio.h \
  /usr/include/aarch64-linux-gnu/c++/14/bits/time_members.h \
  /usr/include/aarch64-linux-gnu/c++/14/bits/messages_members.h \
- /usr/include/libintl.h /usr/include/c++/14/bits/codecvt.h \
- /usr/include/c++/14/bits/locale_facets_nonio.tcc \
+ /usr/include/libintl.h /usr/include/c++/14/bits/locale_facets_nonio.tcc \
  /usr/include/c++/14/bits/locale_conv.h \
- /usr/include/c++/14/bits/quoted_string.h /usr/include/c++/14/sstream \
- /usr/include/c++/14/bits/sstream.tcc \
+ /usr/include/c++/14/bits/quoted_string.h \
  /home/sypark/my_code/RPI_MediaServer/src/ai/types.hpp \
  /home/sypark/my_code/RPI_MediaServer/src/ai/detector.hpp \
  /usr/include/c++/14/queue /usr/include/c++/14/deque \
  /usr/include/c++/14/bits/stl_deque.h /usr/include/c++/14/bits/deque.tcc \
  /usr/include/c++/14/bits/stl_heap.h /usr/include/c++/14/bits/stl_queue.h \
  /usr/include/c++/14/condition_variable \
+ /home/sypark/my_code/RPI_MediaServer/src/utils/screen_capture.hpp \
  /home/sypark/my_code/RPI_MediaServer/inc/httplib.h \
  /usr/include/arpa/inet.h /usr/include/netinet/in.h \
  /usr/include/aarch64-linux-gnu/sys/socket.h \
@@ -388,11 +392,7 @@ CMakeFiles/RPI_MediaServer.dir/src/main.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/fcntl-linux.h \
  /usr/include/linux/falloc.h /usr/include/aarch64-linux-gnu/bits/stat.h \
  /usr/include/aarch64-linux-gnu/bits/struct_stat.h \
- /usr/include/c++/14/fstream \
- /usr/include/aarch64-linux-gnu/c++/14/bits/basic_file.h \
- /usr/include/aarch64-linux-gnu/c++/14/bits/c++io.h \
- /usr/include/c++/14/bits/fstream.tcc /usr/include/c++/14/functional \
- /usr/include/c++/14/bits/std_function.h \
+ /usr/include/c++/14/functional /usr/include/c++/14/bits/std_function.h \
  /usr/include/c++/14/unordered_map \
  /usr/include/c++/14/bits/unordered_map.h \
  /usr/include/c++/14/bits/hashtable.h \
@@ -430,5 +430,4 @@ CMakeFiles/RPI_MediaServer.dir/src/main.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/types/struct_statx_timestamp.h \
  /usr/include/aarch64-linux-gnu/bits/types/struct_statx.h \
  /usr/include/c++/14/unordered_set \
- /usr/include/c++/14/bits/unordered_set.h /usr/include/c++/14/utility \
- /usr/include/c++/14/bits/stl_relops.h /usr/include/c++/14/any
+ /usr/include/c++/14/bits/unordered_set.h /usr/include/c++/14/any

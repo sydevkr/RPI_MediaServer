@@ -1,0 +1,17 @@
+[Unit]
+Description=RPI_MediaServer wf-recorder publisher
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/sypark/my_code/RPI_MediaServer
+Environment=CONFIG_FILE=/home/sypark/my_code/RPI_MediaServer/config.ini
+Environment=WFREC_MODE=single
+ExecStart=/home/sypark/my_code/RPI_MediaServer/start-wfrec.sh
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -9,17 +9,15 @@
 ## 기능 요구사항
 
 ### 입력 및 영상 처리
-- `USB Camera`, `CSI Camera`, `HDMI Capture`, `2x2 Mix` 모드를 지원해야 한다.
+- 지원 입력 모드: USB Camera, CSI Camera, HDMI Capture, FrameBuffer, 2x2 Mix
+- 2x2 Mix는 USB, FrameBuffer, CSI, HDMI를 한 화면에 표시하는 모드다.
 - 현재 런타임에서 비디오 모드 전환이 가능해야 한다.
-- `2x2 Mix`는 현재 기준으로 `USB + black + black + black` 임시 합성 구조를 허용한다.
-- Wayland 화면 캡처 모드는 `wf-recorder -> MediaMTX -> WebRTC/HLS` 경로를 사용한다.
 
 ### 스트리밍 및 제어
 - RTSP publish를 지원해야 한다.
 - HLS 재생을 지원해야 한다.
 - WebRTC 재생을 지원해야 한다.
 - 웹 UI에서 현재 모드 상태를 조회하고 전환할 수 있어야 한다.
-- API 서버는 현재 서버 상태를 반환해야 한다.
 
 ### 운영 및 관찰
 - 포트와 주요 실행 상태를 관리자가 확인할 수 있어야 한다.
@@ -30,34 +28,4 @@
 - HailoRT가 존재할 경우 AI 감지 기능을 연결할 수 있어야 한다.
 - 현재는 AI 비활성 상태에서도 스트리밍 파이프라인이 정상 동작해야 한다.
 
-## 비기능 요구사항
-- 실시간성이 중요하므로 backlog 누적보다 최신 프레임 유지가 우선이다.
-- FFmpeg 리소스 초기화와 모드 전환이 안정적으로 동작해야 한다.
-- HLS와 WebRTC 재연결 시 사용자가 수동 복구 없이 재생을 이어갈 수 있어야 한다.
-- 장비 연결 전 기능은 준비 상태와 검증 완료 상태를 명확히 구분해야 한다.
 
-## 제약사항
-- Raspberry Pi 5와 Raspberry Pi OS Bookworm 환경을 기준으로 한다.
-- FrameBuffer 직접 캡처는 현재 안정적으로 지원하지 않으며 운영 기능으로 간주하지 않는다.
-- CSI Camera와 HDMI Capture는 장비 연결 전까지 실입력 검증 완료로 간주하지 않는다.
-- Wayland 환경에서는 전통적인 `x11grab`/`fbdev` 접근 대신 별도 캡처 방식이 필요하다.
-- HailoRT는 선택적 의존성이다.
-
-## 현재 범위
-
-### 포함
-- C++ 기반 FFmpeg 파이프라인
-- 웹 UI 및 상태 API
-- MediaMTX 기반 RTSP/HLS/WebRTC 경로
-- Wayland 화면 캡처 경로
-- 향후 AI 연동을 위한 기반 구조
-
-### 제외 또는 보류
-- FrameBuffer 실운영 지원
-- CSI/HDMI 실장비 성능 검증 완료 선언
-- OCR 및 위기상황 인식 구현
-- 모바일 푸시/이메일 알림
-
-## 완료 기준
-- AI는 이 문서만 읽고 프로젝트의 목적, 범위, 현재 지원 기능과 제약사항을 설명할 수 있어야 한다.
-- 새 기능 추가 시 먼저 이 문서의 범위와 요구사항이 갱신되어야 한다.

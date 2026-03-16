@@ -25,6 +25,8 @@
 #include <atomic>
 #include <mutex>
 #include <chrono>
+#include <fstream>
+#include <sstream>
 #include "pipeline/pipeline.hpp"
 #include "ai/detector.hpp"
 #include "utils/config.hpp"
@@ -36,13 +38,49 @@
 static std::atomic<bool> g_running{true};
 static std::atomic<bool> g_restart_pipeline{false};
 static std::atomic<utils::VideoMode> g_current_mode{utils::VideoMode::MIXING_2X2};
+static std::atomic<utils::VideoMode> g_target_mode{utils::VideoMode::MIXING_2X2};
 static std::mutex g_config_mutex;
 static utils::Config g_config;
+static std::atomic<int> g_pipeline_state{0};
+static std::atomic<uint64_t> g_switch_seq{0};
+static std::atomic<uint64_t> g_last_completed_switch_seq{0};
+static std::atomic<bool> g_stream_ready{false};
 
 namespace {
 
+enum PipelineState {
+    PIPELINE_RUNNING = 0,
+    PIPELINE_RESTARTING = 1,
+    PIPELINE_ERROR = 2
+};
+
+const char* pipeline_state_to_string(int state) {
+    switch (state) {
+        case PIPELINE_RUNNING: return "running";
+        case PIPELINE_RESTARTING: return "restarting";
+        case PIPELINE_ERROR: return "error";
+        default: return "unknown";
+    }
+}
+
+std::pair<int, int> current_output_resolution() {
+    return utils::resolve_output_resolution(g_config, g_target_mode.load());
+}
+
+std::string video_mode_to_string(utils::VideoMode mode) {
+    switch (mode) {
+        case utils::VideoMode::MIXING_2X2: return "2x2";
+        case utils::VideoMode::ONLY_USB: return "usb";
+        case utils::VideoMode::ONLY_HDMI: return "hdmi";
+        case utils::VideoMode::ONLY_CSI: return "csi";
+        case utils::VideoMode::ONLY_FRAMEBUFFER: return "screen";
+        case utils::VideoMode::PIP_FB_RIGHT_TOP: return "pip";
+        default: return "unknown";
+    }
+}
+
 bool uses_wayland_capture(utils::VideoMode mode) {
-    return mode == utils::VideoMode::ONLY_FRAMEBUFFER;
+    return mode == utils::VideoMode::ONLY_FRAMEBUFFER || mode == utils::VideoMode::MIXING_2X2;
 }
 
 bool unsupported_on_wayland_v1(utils::VideoMode mode) {
@@ -73,32 +111,51 @@ void run_http_server(int port = 8081) {
     // 현재 상태 조회 API
     server.Get("/api/status", [](const httplib::Request&, httplib::Response& res) {
         std::lock_guard<std::mutex> lock(g_config_mutex);
+        const auto [resolved_width, resolved_height] = current_output_resolution();
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Content-Type", "application/json");
-        
-        std::string mode_str;
-        switch (g_current_mode.load()) {
-            case utils::VideoMode::MIXING_2X2: mode_str = "2x2"; break;
-            case utils::VideoMode::ONLY_USB: mode_str = "usb"; break;
-            case utils::VideoMode::ONLY_HDMI: mode_str = "hdmi"; break;
-            case utils::VideoMode::ONLY_CSI: mode_str = "csi"; break;
-            case utils::VideoMode::ONLY_FRAMEBUFFER: mode_str = "screen"; break;
-            case utils::VideoMode::PIP_FB_RIGHT_TOP: mode_str = "pip"; break;
-            default: mode_str = "unknown";
-        }
+        const auto current_mode = g_current_mode.load();
+        const auto target_mode = g_target_mode.load();
+        const auto switch_seq = g_switch_seq.load();
+        const auto last_completed_switch_seq = g_last_completed_switch_seq.load();
+        const auto stream_ready = g_stream_ready.load();
         
         res.set_content(
             "{\n"
             "  \"status\": \"running\",\n"
-            "  \"mode\": \"" + mode_str + "\",\n"
-            "  \"mode_id\": " + std::to_string(static_cast<int>(g_current_mode.load())) + ",\n"
+            "  \"mode\": \"" + video_mode_to_string(current_mode) + "\",\n"
+            "  \"target_mode\": \"" + video_mode_to_string(target_mode) + "\",\n"
+            "  \"pipeline_state\": \"" + std::string(pipeline_state_to_string(g_pipeline_state.load())) + "\",\n"
+            "  \"switch_seq\": " + std::to_string(switch_seq) + ",\n"
+            "  \"last_completed_switch_seq\": " + std::to_string(last_completed_switch_seq) + ",\n"
+            "  \"stream_ready\": " + std::string(stream_ready ? "true" : "false") + ",\n"
+            "  \"framebuffer_image_mode\": " + std::string(current_mode == utils::VideoMode::ONLY_FRAMEBUFFER ? "true" : "false") + ",\n"
+            "  \"framebuffer_snapshot_url\": \"/framebuffer/latest.jpg\",\n"
+            "  \"framebuffer_snapshot_interval_sec\": " + std::to_string(g_config.framebuffer_snapshot_interval_sec) + ",\n"
+            "  \"mode_id\": " + std::to_string(static_cast<int>(current_mode)) + ",\n"
             "  \"resolution\": {\n"
-            "    \"width\": " + std::to_string(g_config.width) + ",\n"
-            "    \"height\": " + std::to_string(g_config.height) + ",\n"
+            "    \"width\": " + std::to_string(resolved_width) + ",\n"
+            "    \"height\": " + std::to_string(resolved_height) + ",\n"
             "    \"fps\": " + std::to_string(g_config.fps) + "\n"
             "  }\n"
             "}", "application/json"
         );
+    });
+
+    server.Get("/framebuffer/latest.jpg", [](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(g_config_mutex);
+        std::ifstream file(g_config.framebuffer_snapshot_path, std::ios::binary);
+        if (!file.is_open()) {
+            res.status = 404;
+            res.set_content("FrameBuffer snapshot not ready", "text/plain");
+            return;
+        }
+
+        std::ostringstream buffer;
+        buffer << file.rdbuf();
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        res.set_content(buffer.str(), "image/jpeg");
     });
     
     // 모드 변경 API
@@ -147,16 +204,27 @@ void run_http_server(int port = 8081) {
             std::lock_guard<std::mutex> lock(g_config_mutex);
             if (g_current_mode.load() != new_mode) {
                 auto old_mode = g_current_mode.load();
-                g_current_mode.store(new_mode);
+                const auto next_switch_seq = g_switch_seq.fetch_add(1) + 1;
+                g_target_mode.store(new_mode);
                 g_config.video_mode = new_mode;
                 g_restart_pipeline.store(true);
+                g_pipeline_state.store(PIPELINE_RESTARTING);
+                g_stream_ready.store(false);
                 logger::info("Mode change requested: {} -> {}", 
                     static_cast<int>(old_mode), 
                     static_cast<int>(new_mode));
+                logger::info("Mode request accepted, switch_seq={}, target_mode={}",
+                    next_switch_seq, static_cast<int>(new_mode));
             }
         }
         
-        res.set_content("{\"success\": true, \"mode\": \"" + mode + "\", \"message\": \"Mode changed, capture pipeline restarting...\"}", "application/json");
+        res.set_content(
+            "{\"success\": true, \"mode\": \"" + mode
+            + "\", \"previous_mode\": \"" + video_mode_to_string(g_current_mode.load())
+            + "\", \"target_mode\": \"" + video_mode_to_string(new_mode)
+            + "\", \"switch_seq\": " + std::to_string(g_switch_seq.load())
+            + ", \"pipeline_state\": \"restarting\", \"message\": \"Mode changed, capture pipeline restarting...\"}",
+            "application/json");
     });
     
     // OPTIONS 처리 (CORS preflight)
@@ -188,6 +256,8 @@ int main(int argc, char** argv) {
             std::lock_guard<std::mutex> lock(g_config_mutex);
             g_config = utils::load_config(argc > 1 ? argv[1] : "config.ini");
             g_current_mode.store(g_config.video_mode);
+            g_target_mode.store(g_config.video_mode);
+            g_stream_ready.store(false);
         }
         logger::init(g_config.log_level);
         
@@ -203,50 +273,74 @@ int main(int argc, char** argv) {
         
         // 4. 메인 처리 루프 (파이프라인 재시작 지원)
         logger::info("Entering main loop...");
+        g_pipeline_state.store(PIPELINE_RESTARTING);
         
         while (g_running) {
             utils::Config current_config;
-            utils::VideoMode current_mode;
+            utils::VideoMode requested_mode;
+            std::unique_ptr<utils::ScreenCapture> snapshot_capture;
             {
                 std::lock_guard<std::mutex> lock(g_config_mutex);
                 current_config = g_config;
-                current_mode = g_current_mode.load();
+                requested_mode = g_target_mode.load();
             }
 
-            if (unsupported_on_wayland_v1(current_mode)) {
-                logger::error("Mode {} is not supported in the Wayland capture v1 path", static_cast<int>(current_mode));
+            if (unsupported_on_wayland_v1(requested_mode)) {
+                g_pipeline_state.store(PIPELINE_ERROR);
+                g_stream_ready.store(false);
+                logger::error("Mode {} is not supported in the Wayland capture v1 path", static_cast<int>(requested_mode));
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 continue;
             }
 
-            if (uses_wayland_capture(current_mode)) {
-                utils::ScreenCapture capture(current_config);
-                if (!capture.start()) {
-                    logger::error("Wayland screen capture initialization failed");
-                    std::this_thread::sleep_for(std::chrono::seconds(2));
+            if (uses_wayland_capture(requested_mode)) {
+                snapshot_capture = std::make_unique<utils::ScreenCapture>(current_config);
+                if (!snapshot_capture->start()) {
+                    if (requested_mode == utils::VideoMode::MIXING_2X2) {
+                        logger::warn("FrameBuffer snapshot loop unavailable, continuing with black fallback in 2x2 mode");
+                    } else {
+                        g_pipeline_state.store(PIPELINE_ERROR);
+                        logger::error("Wayland screen capture initialization failed");
+                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        continue;
+                    }
+                }
+
+                if (requested_mode == utils::VideoMode::ONLY_FRAMEBUFFER) {
+                    logger::info("FrameBuffer snapshot mode initialized, mode: {}", static_cast<int>(requested_mode));
+                    g_restart_pipeline.store(false);
+                    g_current_mode.store(requested_mode);
+                    g_target_mode.store(requested_mode);
+                    g_pipeline_state.store(PIPELINE_RUNNING);
+                    g_stream_ready.store(true);
+                    g_last_completed_switch_seq.store(g_switch_seq.load());
+                    logger::info("Snapshot image marked ready for mode {}", static_cast<int>(requested_mode));
+                    logger::info("Switch completed seq={}", g_last_completed_switch_seq.load());
+
+                    while (g_running && !g_restart_pipeline.load()) {
+                        if (!snapshot_capture->is_running()) {
+                            g_pipeline_state.store(PIPELINE_ERROR);
+                            g_stream_ready.store(false);
+                            logger::error("FrameBuffer snapshot loop stopped unexpectedly, restarting...");
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+
+                    logger::info("Stopping FrameBuffer snapshot mode...");
+                    snapshot_capture->stop();
+
+                    if (g_restart_pipeline.load()) {
+                        g_pipeline_state.store(PIPELINE_RESTARTING);
+                        logger::info("Restarting capture path with new mode: {}",
+                            static_cast<int>(g_current_mode.load()));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    }
                     continue;
                 }
 
-                logger::info("Wayland screen capture initialized, mode: {}", static_cast<int>(current_mode));
-                g_restart_pipeline.store(false);
-
-                while (g_running && !g_restart_pipeline.load()) {
-                    if (!capture.is_running()) {
-                        logger::error("Screen capture stopped unexpectedly, restarting...");
-                        break;
-                    }
-                    std::this_thread::sleep_for(std::chrono::seconds(1));
-                }
-
-                logger::info("Stopping Wayland screen capture...");
-                capture.stop();
-
-                if (g_restart_pipeline.load()) {
-                    logger::info("Restarting capture path with new mode: {}",
-                        static_cast<int>(g_current_mode.load()));
-                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                }
-                continue;
+                logger::info("FrameBuffer snapshot loop initialized for mixed mode");
+                // 2x2는 아래 FFmpeg pipeline 경로로 계속 진행
             }
 
             // 4.1 현재 설정으로 Pipeline 생성 및 초기화
@@ -256,13 +350,22 @@ int main(int argc, char** argv) {
             }
             
             if (!pipe->init()) {
+                g_pipeline_state.store(PIPELINE_ERROR);
+                g_stream_ready.store(false);
                 logger::error("Pipeline initialization failed");
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 continue;
             }
             
-            logger::info("Pipeline initialized, mode: {}", static_cast<int>(g_current_mode.load()));
+            logger::info("Pipeline initialized, requested mode: {}", static_cast<int>(requested_mode));
             g_restart_pipeline.store(false);
+            g_current_mode.store(requested_mode);
+            g_target_mode.store(requested_mode);
+            g_pipeline_state.store(PIPELINE_RUNNING);
+            g_stream_ready.store(true);
+            g_last_completed_switch_seq.store(g_switch_seq.load());
+            logger::info("Stream marked ready for mode {}", static_cast<int>(requested_mode));
+            logger::info("Switch completed seq={}", g_last_completed_switch_seq.load());
             
             // 4.2 프레임 처리 루프
             while (g_running && !g_restart_pipeline.load()) {
@@ -282,6 +385,8 @@ int main(int argc, char** argv) {
                 
                 // 인코딩 및 RTSP 스트리밍
                 if (!pipe->encode_and_send()) {
+                    g_pipeline_state.store(PIPELINE_ERROR);
+                    g_stream_ready.store(false);
                     logger::error("Encoding failed, restarting pipeline...");
                     break;
                 }
@@ -290,8 +395,15 @@ int main(int argc, char** argv) {
             // 4.3 Pipeline 정리 (재시작 또는 종료 전)
             logger::info("Shutting down pipeline...");
             pipe->shutdown();
+
+            if (snapshot_capture) {
+                logger::info("Stopping FrameBuffer snapshot loop...");
+                snapshot_capture->stop();
+            }
             
             if (g_restart_pipeline.load()) {
+                g_pipeline_state.store(PIPELINE_RESTARTING);
+                g_stream_ready.store(false);
                 logger::info("Restarting pipeline with new mode: {}", 
                     static_cast<int>(g_current_mode.load()));
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));

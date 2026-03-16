@@ -1,120 +1,103 @@
 # 05MANUAL.md
 
-## 문서 역할
-- 이 문서는 관리자 실행 및 운영 절차를 정리하는 기준 문서다.
-- 작업 완료 후 운영 방식이 바뀌면 점진적으로 계속 갱신한다.
-
-## 현재 서비스 구성
-- 웹 UI: `http://10.1.119.31:8080/`
-- 앱 API: `http://10.1.119.31:8081/api/status`
-- RTSP publish: `rtsp://10.1.119.31:8554/live`
-- HLS: `http://10.1.119.31:8888/live`
-- WebRTC: `http://10.1.119.31:8889/live`
-
-## 사전 확인
-- Raspberry Pi 5가 정상 부팅되었는지 확인
-- 필요한 입력 장치가 연결되었는지 확인
-- 프로젝트 루트 경로에서 작업 중인지 확인
-- 설정 파일 `config.ini`가 현재 운영값을 반영하는지 확인
-
-## 빌드
-```bash
-./build.sh
-```
-
 ## 실행
+
 ```bash
+vi config.ini
+# mix_width=320, mix_height=240, single_width=1280, single_height=720 확인
+# mix_bitrate=2000000, single_bitrate=10000000 확인
+# framebuffer_snapshot_path=/tmp/framebuffer_latest.jpg 확인
+# framebuffer_snapshot_interval_sec=5 확인
+# framebuffer_snapshot_quality=7 확인
+
+./build.sh
+# 프로젝트 빌드
+
+sudo systemctl start mediamtx
+# MediaMTX 서비스 시작
+
 ./start.sh
+# 앱 서버 실행
 ```
 
-## 수동 실행
+## FrameBuffer 확인
 
-### 1. MediaMTX 실행
 ```bash
-/usr/local/bin/mediamtx ./mediamtx.yml
+curl http://10.1.119.31:8081/api/status
+# 현재 모드와 snapshot 주기 확인
+
+curl -I http://10.1.119.31:8081/framebuffer/latest.jpg
+# 최신 FrameBuffer JPEG 응답 확인
+
+xdg-open http://10.1.119.31:8081/
+# 메인 UI에서 screen 모드 확인
 ```
 
-### 2. 앱 서버 실행
-새 터미널:
+`screen` 모드는 현재 영상 스트림이 아니라 `5초`마다 갱신되는 최신 이미지 모드다. 직접 확인 경로는 아래와 같다.
+
+- 메인 UI: `http://10.1.119.31:8081/`
+- 최신 이미지: `http://10.1.119.31:8081/framebuffer/latest.jpg`
+- 상태 API: `http://10.1.119.31:8081/api/status`
+
+## 실행 특이사항
+
+- FrameBuffer 캡처는 `grim`을 사용하므로 Wayland GUI 세션이 살아 있어야 한다.
+- TTY/SSH에서 직접 실행하면 display 접근 실패가 날 수 있다.
+- 필요 시 아래 환경값을 명시해 GUI 세션 기준으로 실행한다.
 
 ```bash
+WAYLAND_DISPLAY=wayland-0 \
+XDG_RUNTIME_DIR=/run/user/1000 \
+XDG_SESSION_TYPE=wayland \
 ./build/RPI_MediaServer config.ini
 ```
 
-### 3. 웹 정적 서버 실행
-새 터미널:
+## 확인
 
-```bash
-cd web
-python3 -m http.server 8080
-```
-
-## 실행 후 확인
-
-### API 상태 확인
 ```bash
 curl http://10.1.119.31:8081/api/status
-```
+# 앱 상태 확인
 
-### 포트 확인
-```bash
+curl http://10.1.119.31:8081/api/status | jq '.resolution'
+# 현재 모드에 적용된 출력 해상도 확인
+
+grep -E 'mix_bitrate|single_bitrate' config.ini
+# 현재 설정된 모드별 비트레이트 확인
+
+systemctl status mediamtx --no-pager
+# MediaMTX 서비스 상태 확인
+
 ss -ltnp | grep -E ':(8080|8081|8554|8888|8889)\b'
-```
+# 주요 포트 리슨 확인
 
-### 장치 확인
-```bash
 ls -l /dev/video*
+# 비디오 장치 확인
 ```
 
-## 현재 웹 UI에서 가능한 동작
-- 스트리밍 프로토콜 전환
-  - `RTSP/HLS`
-  - `WebRTC`
-- 비디오 모드 전환
-  - `USB Camera`
-  - `CSI Camera`
-  - `HDMI Capture`
-  - `2x2 Mix`
+## wf-recorder 참고용 절차
 
-참고:
-- `FrameBuffer`는 메뉴상 비활성 또는 재검토 대상이다.
-- `2x2 Mix`는 현재 실제 4입력 완성 상태가 아니다.
+아래 내용은 이전 실험 경로이며 참고용이다. 현재 권장 운영 경로는 아니다.
 
-## 종료
-
-### 포그라운드 종료
-- 각 터미널에서 `Ctrl+C`
-
-### 강제 종료
 ```bash
-killall -9 mediamtx
-killall -9 RPI_MediaServer
-pkill -f "python3 -m http.server 8080"
+mkdir -p ~/.config/systemd/user
+cp systemd/user/wf-recorder.service ~/.config/systemd/user/wf-recorder.service
+
+chmod +x ./start-wfrec.sh
+
+systemctl --user daemon-reload
+systemctl --user enable wf-recorder.service
+
+loginctl enable-linger "$USER"
+# SSH 세션 밖에서도 user service 유지가 필요할 때 1회 실행
+
+systemctl --user start wf-recorder.service
+systemctl --user stop wf-recorder.service
+systemctl --user restart wf-recorder.service
+systemctl --user status wf-recorder.service --no-pager
+
+journalctl --user -u wf-recorder.service -f
+# wf-recorder 실행 로그 확인
+
+./start-wfrec.sh single
+./start-wfrec.sh mix
 ```
-
-## 재시작 절차
-1. 기존 프로세스를 종료한다.
-2. `MediaMTX`를 먼저 실행한다.
-3. 앱 서버를 실행한다.
-4. 웹 정적 서버를 실행한다.
-5. API와 포트를 확인한다.
-
-## 장애 점검
-
-### 웹페이지가 열리지 않을 때
-- `python3 -m http.server 8080` 실행 여부 확인
-- `8080` 포트 리슨 여부 확인
-
-### 웹은 열리지만 영상이 안 나올 때
-- 앱 서버 실행 여부 확인
-- MediaMTX 실행 여부 확인
-- `8081`, `8554`, `8888`, `8889` 포트 확인
-
-### 카메라 입력 오류가 날 때
-- `/dev/video*` 장치 존재 여부 확인
-- 다른 프로세스가 장치를 점유하는지 확인
-
-### HLS 또는 WebRTC가 끊길 때
-- MediaMTX 프로세스 확인
-- 앱 서버의 RTSP publish 상태 확인
-- 웹페이지를 새로고침해 재연결 확인

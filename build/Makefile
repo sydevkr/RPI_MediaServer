@@ -113,6 +113,7 @@ preinstall/fast:
 
 # clear depends
 depend:
+	$(CMAKE_COMMAND) -P /home/sypark/my_code/RPI_MediaServer/build/CMakeFiles/VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
 .PHONY : depend
 
@@ -249,6 +250,30 @@ src/utils/logger.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/src/utils/logger.cpp.s
 .PHONY : src/utils/logger.cpp.s
 
+src/utils/screen_capture.o: src/utils/screen_capture.cpp.o
+.PHONY : src/utils/screen_capture.o
+
+# target to build an object file
+src/utils/screen_capture.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.o
+.PHONY : src/utils/screen_capture.cpp.o
+
+src/utils/screen_capture.i: src/utils/screen_capture.cpp.i
+.PHONY : src/utils/screen_capture.i
+
+# target to preprocess a source file
+src/utils/screen_capture.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.i
+.PHONY : src/utils/screen_capture.cpp.i
+
+src/utils/screen_capture.s: src/utils/screen_capture.cpp.s
+.PHONY : src/utils/screen_capture.s
+
+# target to generate assembly for a file
+src/utils/screen_capture.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.s
+.PHONY : src/utils/screen_capture.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -273,6 +298,9 @@ help:
 	@echo "... src/utils/logger.o"
 	@echo "... src/utils/logger.i"
 	@echo "... src/utils/logger.s"
+	@echo "... src/utils/screen_capture.o"
+	@echo "... src/utils/screen_capture.i"
+	@echo "... src/utils/screen_capture.s"
 .PHONY : help
 
 
@@ -284,6 +312,7 @@ help:
 # No rule that depends on this can have commands that come from listfiles
 # because they might be regenerated.
 cmake_check_build_system:
+	$(CMAKE_COMMAND) -P /home/sypark/my_code/RPI_MediaServer/build/CMakeFiles/VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 0
 .PHONY : cmake_check_build_system
 

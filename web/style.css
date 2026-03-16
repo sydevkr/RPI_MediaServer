@@ -83,6 +83,22 @@ header h1 {
     object-fit: contain;
 }
 
+#video-player.hidden {
+    display: none;
+}
+
+.framebuffer-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: #05070f;
+}
+
+.framebuffer-image.hidden {
+    display: none;
+}
+
 .video-overlay {
     position: absolute;
     top: 0;
@@ -90,6 +106,37 @@ header h1 {
     right: 0;
     padding: 16px;
     background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+}
+
+.stream-placeholder {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+.stream-placeholder.hidden {
+    display: none;
+}
+
+.placeholder-content {
+    text-align: center;
+    color: #f2f5ff;
+    padding: 24px;
+}
+
+.placeholder-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.placeholder-subtitle {
+    font-size: 0.95rem;
+    color: #98a5c7;
 }
 
 .stream-info {
@@ -207,6 +254,12 @@ header h1 {
 .btn.active {
     background: #00d4ff;
     border-color: #00d4ff;
+    color: #0f0f23;
+}
+
+.btn.pending {
+    background: #f0b429;
+    border-color: #f0b429;
     color: #0f0f23;
 }
 

@@ -10,6 +10,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/RPI_MediaServer.dir/src/utils/config.cpp.o.d"
   "CMakeFiles/RPI_MediaServer.dir/src/utils/logger.cpp.o"
   "CMakeFiles/RPI_MediaServer.dir/src/utils/logger.cpp.o.d"
+  "CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.o"
+  "CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.o.d"
   "RPI_MediaServer"
   "RPI_MediaServer.pdb"
 )

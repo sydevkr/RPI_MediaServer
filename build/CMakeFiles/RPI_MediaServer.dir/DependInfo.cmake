@@ -13,6 +13,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/sypark/my_code/RPI_MediaServer/src/pipeline/pipeline.cpp" "CMakeFiles/RPI_MediaServer.dir/src/pipeline/pipeline.cpp.o" "gcc" "CMakeFiles/RPI_MediaServer.dir/src/pipeline/pipeline.cpp.o.d"
   "/home/sypark/my_code/RPI_MediaServer/src/utils/config.cpp" "CMakeFiles/RPI_MediaServer.dir/src/utils/config.cpp.o" "gcc" "CMakeFiles/RPI_MediaServer.dir/src/utils/config.cpp.o.d"
   "/home/sypark/my_code/RPI_MediaServer/src/utils/logger.cpp" "CMakeFiles/RPI_MediaServer.dir/src/utils/logger.cpp.o" "gcc" "CMakeFiles/RPI_MediaServer.dir/src/utils/logger.cpp.o.d"
+  "/home/sypark/my_code/RPI_MediaServer/src/utils/screen_capture.cpp" "CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.o" "gcc" "CMakeFiles/RPI_MediaServer.dir/src/utils/screen_capture.cpp.o.d"
   "" "RPI_MediaServer" "gcc" "CMakeFiles/RPI_MediaServer.dir/link.d"
   )
 

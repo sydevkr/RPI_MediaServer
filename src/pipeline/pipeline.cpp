@@ -26,6 +26,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <sys/stat.h>
 
 namespace pipeline {
 
@@ -36,6 +37,11 @@ Pipeline::Pipeline(const utils::Config& cfg) : cfg_(cfg) {
     // V4L2 및 네트워크 초기화
     avdevice_register_all();
     avformat_network_init();
+    const auto [resolved_width, resolved_height] =
+        utils::resolve_output_resolution(cfg_, cfg_.video_mode);
+    output_width_ = resolved_width;
+    output_height_ = resolved_height;
+    output_bitrate_ = utils::resolve_output_bitrate(cfg_, cfg_.video_mode);
 }
 
 /**
@@ -67,6 +73,8 @@ void Pipeline::shutdown() {
     black_frame_fb_.reset();
     black_frame_csi_.reset();
     black_frame_hdmi_.reset();
+    framebuffer_snapshot_frame_.reset();
+    framebuffer_snapshot_mtime_ = 0;
 
     encoder_ctx_.reset();
     decoder_ctx_.reset();
@@ -170,7 +178,7 @@ bool Pipeline::init_input() {
     
     // V4L2 옵션
     av_dict_set(&opts, "video_size",
-                (std::to_string(cfg_.width) + "x" + std::to_string(cfg_.height)).c_str(), 0);
+                (std::to_string(output_width_) + "x" + std::to_string(output_height_)).c_str(), 0);
     av_dict_set(&opts, "framerate", std::to_string(cfg_.fps).c_str(), 0);
     av_dict_set(&opts, "input_format", "yuyv422", 0);
     av_dict_set(&opts, "thread_queue_size", "64", 0);
@@ -250,14 +258,14 @@ std::string Pipeline::build_filter_string() {
         case utils::VideoMode::ONLY_USB:
         case utils::VideoMode::ONLY_FRAMEBUFFER:
             // 단일 입력: hflip(좌우반전) + scale 적용
-            filter = "hflip,scale=" + std::to_string(cfg_.width) + ":" + std::to_string(cfg_.height);
+            filter = "hflip,scale=" + std::to_string(output_width_) + ":" + std::to_string(output_height_);
             break;
         case utils::VideoMode::MIXING_2X2:
             // 2x2 Mixing: USB만 활성, 나머지 검은 화면
             // color 필터 사용 (안정적)
             {
-                int cell_w = cfg_.width / 2;
-                int cell_h = cfg_.height / 2;
+                int cell_w = output_width_ / 2;
+                int cell_h = output_height_ / 2;
                 std::string fps_str = std::to_string(cfg_.fps);
                 
                 // USB 입력 - 실제 영상 스케일링 (좌상단)
@@ -393,10 +401,8 @@ bool Pipeline::init_filter_graph_2x2() {
     const AVFilter* hflip = avfilter_get_by_name("hflip");
     const AVFilter* format = avfilter_get_by_name("format");
     const AVFilter* xstack = avfilter_get_by_name("xstack");
-    const AVFilter* buffersink = avfilter_get_by_name("buffersink");
-    
-    int cell_w = cfg_.width / 2;
-    int cell_h = cfg_.height / 2;
+    int cell_w = output_width_ / 2;
+    int cell_h = output_height_ / 2;
     std::string fps_str = std::to_string(cfg_.fps);
     
     // 1. USB 입력 버퍼 소스 생성
@@ -542,8 +548,8 @@ bool Pipeline::init_encoder() {
     }
     
     // 인코딩 파라미터 설정
-    encoder_ctx_->width = cfg_.width;
-    encoder_ctx_->height = cfg_.height;
+    encoder_ctx_->width = output_width_;
+    encoder_ctx_->height = output_height_;
     encoder_ctx_->time_base = {1, cfg_.fps};
     encoder_ctx_->framerate = {cfg_.fps, 1};
     encoder_ctx_->pix_fmt = AV_PIX_FMT_YUV420P;
@@ -561,10 +567,10 @@ bool Pipeline::init_encoder() {
     }
     
     // 비트레이트 제어 (CBR)
-    encoder_ctx_->bit_rate = cfg_.bitrate;
-    encoder_ctx_->rc_min_rate = cfg_.bitrate;
-    encoder_ctx_->rc_max_rate = cfg_.bitrate;
-    encoder_ctx_->rc_buffer_size = cfg_.bitrate / cfg_.fps;
+    encoder_ctx_->bit_rate = output_bitrate_;
+    encoder_ctx_->rc_min_rate = output_bitrate_;
+    encoder_ctx_->rc_max_rate = output_bitrate_;
+    encoder_ctx_->rc_buffer_size = output_bitrate_ / cfg_.fps;
     
     if (avcodec_open2(encoder_ctx_.get(), encoder, &opts) < 0) {
         logger::error("Failed to open encoder");
@@ -574,7 +580,7 @@ bool Pipeline::init_encoder() {
     av_dict_free(&opts);
     
     logger::info("Encoder initialized: {} {}x{} @ {}bps",
-                 cfg_.codec, cfg_.width, cfg_.height, cfg_.bitrate);
+                 cfg_.codec, output_width_, output_height_, output_bitrate_);
     return true;
 }
 
@@ -713,6 +719,9 @@ FramePtr Pipeline::capture() {
                 continue;
             }
 
+            if (cfg_.video_mode == utils::VideoMode::MIXING_2X2) {
+                overlay_framebuffer_snapshot(result);
+            }
             if (cfg_.video_mode == utils::VideoMode::MIXING_2X2 && cfg_.show_input_labels) {
                 overlay_2x2_labels(result);
             }
@@ -847,6 +856,157 @@ void Pipeline::overlay_2x2_labels(FramePtr& frame) {
     draw_string(cell_w + cell_w / 2, cell_h + cell_h / 2, "HDMI");
 }
 
+FramePtr Pipeline::load_framebuffer_snapshot_frame(int width, int height) {
+    struct stat st {};
+    if (stat(cfg_.framebuffer_snapshot_path.c_str(), &st) != 0) {
+        return nullptr;
+    }
+
+    if (framebuffer_snapshot_frame_ && framebuffer_snapshot_mtime_ == st.st_mtime) {
+        FramePtr cached(av_frame_clone(framebuffer_snapshot_frame_.get()));
+        if (cached) {
+            return cached;
+        }
+    }
+
+    AVFormatContext* input_ctx = nullptr;
+    if (avformat_open_input(&input_ctx, cfg_.framebuffer_snapshot_path.c_str(), nullptr, nullptr) < 0) {
+        logger::warn("Failed to open framebuffer snapshot: {}", cfg_.framebuffer_snapshot_path);
+        return nullptr;
+    }
+
+    InputFormatCtxPtr image_input(input_ctx);
+    if (avformat_find_stream_info(image_input.get(), nullptr) < 0) {
+        logger::warn("Failed to find snapshot stream info");
+        return nullptr;
+    }
+
+    int stream_index = -1;
+    for (unsigned i = 0; i < image_input->nb_streams; ++i) {
+        if (image_input->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            stream_index = static_cast<int>(i);
+            break;
+        }
+    }
+    if (stream_index < 0) {
+        return nullptr;
+    }
+
+    AVCodecParameters* codecpar = image_input->streams[stream_index]->codecpar;
+    const AVCodec* decoder = avcodec_find_decoder(codecpar->codec_id);
+    if (!decoder) {
+        logger::warn("No decoder for framebuffer snapshot");
+        return nullptr;
+    }
+
+    CodecCtxPtr decoder_ctx(avcodec_alloc_context3(decoder));
+    if (!decoder_ctx) {
+        return nullptr;
+    }
+    if (avcodec_parameters_to_context(decoder_ctx.get(), codecpar) < 0) {
+        return nullptr;
+    }
+    if (avcodec_open2(decoder_ctx.get(), decoder, nullptr) < 0) {
+        return nullptr;
+    }
+
+    PacketPtr packet(av_packet_alloc());
+    if (!packet) {
+        return nullptr;
+    }
+
+    FramePtr decoded;
+    while (av_read_frame(image_input.get(), packet.get()) >= 0) {
+        if (packet->stream_index != stream_index) {
+            av_packet_unref(packet.get());
+            continue;
+        }
+
+        if (avcodec_send_packet(decoder_ctx.get(), packet.get()) < 0) {
+            av_packet_unref(packet.get());
+            break;
+        }
+        av_packet_unref(packet.get());
+
+        decoded = FramePtr(av_frame_alloc());
+        const int receive_result = avcodec_receive_frame(decoder_ctx.get(), decoded.get());
+        if (receive_result == 0) {
+            break;
+        }
+        decoded.reset();
+        if (receive_result != AVERROR(EAGAIN)) {
+            break;
+        }
+    }
+
+    if (!decoded) {
+        return nullptr;
+    }
+
+    FramePtr scaled(av_frame_alloc());
+    if (!scaled) {
+        return nullptr;
+    }
+    scaled->format = AV_PIX_FMT_YUV420P;
+    scaled->width = width;
+    scaled->height = height;
+    if (av_frame_get_buffer(scaled.get(), 32) < 0) {
+        return nullptr;
+    }
+
+    SwsContext* sws_ctx = sws_getContext(
+        decoded->width, decoded->height, static_cast<AVPixelFormat>(decoded->format),
+        width, height, AV_PIX_FMT_YUV420P,
+        SWS_BILINEAR, nullptr, nullptr, nullptr);
+    if (!sws_ctx) {
+        return nullptr;
+    }
+
+    sws_scale(sws_ctx, decoded->data, decoded->linesize, 0, decoded->height, scaled->data, scaled->linesize);
+    sws_freeContext(sws_ctx);
+
+    framebuffer_snapshot_mtime_ = st.st_mtime;
+    framebuffer_snapshot_frame_ = FramePtr(av_frame_clone(scaled.get()));
+    return scaled;
+}
+
+void Pipeline::overlay_framebuffer_snapshot(FramePtr& frame) {
+    if (!frame || frame->format != AV_PIX_FMT_YUV420P) {
+        return;
+    }
+
+    const int cell_w = frame->width / 2;
+    const int cell_h = frame->height / 2;
+    FramePtr snapshot = load_framebuffer_snapshot_frame(cell_w, cell_h);
+    if (!snapshot) {
+        return;
+    }
+
+    const int luma_x = cell_w;
+    const int luma_y = 0;
+    for (int y = 0; y < cell_h; ++y) {
+        std::memcpy(
+            frame->data[0] + (luma_y + y) * frame->linesize[0] + luma_x,
+            snapshot->data[0] + y * snapshot->linesize[0],
+            cell_w);
+    }
+
+    const int chroma_w = cell_w / 2;
+    const int chroma_h = cell_h / 2;
+    const int chroma_x = luma_x / 2;
+    const int chroma_y = luma_y / 2;
+    for (int y = 0; y < chroma_h; ++y) {
+        std::memcpy(
+            frame->data[1] + (chroma_y + y) * frame->linesize[1] + chroma_x,
+            snapshot->data[1] + y * snapshot->linesize[1],
+            chroma_w);
+        std::memcpy(
+            frame->data[2] + (chroma_y + y) * frame->linesize[2] + chroma_x,
+            snapshot->data[2] + y * snapshot->linesize[2],
+            chroma_w);
+    }
+}
+
 void Pipeline::overlay_wallclock(FramePtr& frame) {
     if (!frame || frame->format != AV_PIX_FMT_YUV420P) return;
 
@@ -855,11 +1015,13 @@ void Pipeline::overlay_wallclock(FramePtr& frame) {
     uint8_t* y_plane = frame->data[0];
     int y_stride = frame->linesize[0];
 
-    const int scale = 2;
+    const bool is_mix_mode = (cfg_.video_mode == utils::VideoMode::MIXING_2X2);
+    const bool is_usb_single_mode = (cfg_.video_mode == utils::VideoMode::ONLY_USB);
+    const int scale = is_mix_mode ? 1 : (is_usb_single_mode ? 4 : 3);
     const int char_width = 5 * scale + 2;
     const int char_height = 7 * scale;
-    const int margin_x = 8;
-    const int margin_y = 8;
+    const int margin_x = is_mix_mode ? 8 : 16;
+    const int margin_y = is_mix_mode ? 8 : 12;
 
     auto glyph_for_char = [](char c) -> const uint8_t* {
         static const uint8_t digits[10][7] = {
@@ -877,12 +1039,16 @@ void Pipeline::overlay_wallclock(FramePtr& frame) {
         static const uint8_t colon[7] = {
             0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000
         };
+        static const uint8_t letter_x[7] = {
+            0b00000, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b00000
+        };
         static const uint8_t space[7] = {
             0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00000
         };
 
         if (c >= '0' && c <= '9') return digits[c - '0'];
         if (c == ':') return colon;
+        if (c == 'x' || c == 'X') return letter_x;
         return space;
     };
 
@@ -921,16 +1087,27 @@ void Pipeline::overlay_wallclock(FramePtr& frame) {
     localtime_r(&now, &local_tm);
 
     std::ostringstream oss;
-    oss << std::put_time(&local_tm, "%H:%M:%S");
+    oss << std::put_time(&local_tm, "%H:%M:%S")
+        << ' '
+        << frame->width
+        << 'x'
+        << frame->height;
     std::string label = oss.str();
 
+    const int box_padding_x = is_mix_mode ? 4 : 8;
+    const int box_padding_y = is_mix_mode ? 4 : 8;
     int text_width = static_cast<int>(label.size()) * char_width - 2;
-    int box_width = text_width + 12;
-    int box_height = char_height + 12;
-    draw_box(margin_x, margin_y, box_width, box_height);
+    int box_width = std::min(width - margin_x, text_width + box_padding_x * 2);
+    int box_height = char_height + box_padding_y * 2;
+    int box_x = margin_x;
+    int box_y = margin_y;
+    if (!is_mix_mode && !is_usb_single_mode) {
+        box_x = std::max(0, width - margin_x - box_width);
+    }
+    draw_box(box_x, box_y, box_width, box_height);
 
-    int text_x = margin_x + 6;
-    int text_y = margin_y + 6;
+    int text_x = box_x + box_padding_x;
+    int text_y = box_y + box_padding_y;
     for (size_t i = 0; i < label.size(); i++) {
         draw_char(text_x + static_cast<int>(i) * char_width, text_y, label[i]);
     }

@@ -22,6 +22,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include "logger.hpp"
 
 namespace utils {
@@ -57,14 +58,17 @@ struct Config {
     std::string fb_device = "";                    ///< 레거시 FrameBuffer/X11 입력 경로
     int fb_width = 1920;                           ///< Wayland 화면 캡처 너비
     int fb_height = 1080;                          ///< Wayland 화면 캡처 높이
-    int width = 1920;                              ///< 출력 너비
-    int height = 1080;                             ///< 출력 높이
+    int mix_width = 320;                           ///< 2x2 Mix 출력 너비
+    int mix_height = 240;                          ///< 2x2 Mix 출력 높이
+    int single_width = 1280;                       ///< 싱글 모드 출력 너비
+    int single_height = 720;                       ///< 싱글 모드 출력 높이
     int fps = 30;                                  ///< 프레임레이트
     bool show_input_labels = true;                 ///< 2x2 INPUT 타입 라벨 오버레이
     bool show_wallclock_overlay = true;            ///< 송출 지연 측정용 현재 시각 오버레이
     
     // 인코딩 설정
-    int bitrate = 4000000;                         ///< 비트레이트 (4Mbps)
+    int mix_bitrate = 2000000;                     ///< 2x2 Mix 비트레이트 (2Mbps)
+    int single_bitrate = 4000000;                  ///< 싱글 모드 비트레이트 (4Mbps)
     std::string codec = "libx264";                 ///< 코덱 (소프트웨어)
     int gop_size = 30;                             ///< GOP 크기 (1초)
     
@@ -73,6 +77,9 @@ struct Config {
     std::string wf_recorder_path = "/usr/bin/wf-recorder"; ///< Wayland 캡처 실행 파일
     std::string wayland_display = "";              ///< WAYLAND_DISPLAY override
     std::string xdg_runtime_dir = "";              ///< XDG_RUNTIME_DIR override
+    std::string framebuffer_snapshot_path = "/tmp/framebuffer_latest.jpg"; ///< 최신 FrameBuffer JPEG 스냅샷 경로
+    int framebuffer_snapshot_interval_sec = 5;     ///< FrameBuffer 스냅샷 갱신 주기(초)
+    int framebuffer_snapshot_quality = 7;          ///< JPEG 품질(qscale, 낮을수록 고품질)
     
     // AI 설정
     std::string ai_model = "yolov8s_person.hef";  ///< Hailo HEF 모델 경로
@@ -91,5 +98,21 @@ struct Config {
  * 파일이 없으면 기본값 사용, 파싱 에러 시 해당 항목은 기본값 유지
  */
 Config load_config(const std::string& path);
+
+/**
+ * @brief 현재 비디오 모드에 적용될 출력 해상도 조회
+ * @param cfg 시스템 설정
+ * @param mode 비디오 모드
+ * @return {width, height}
+ */
+std::pair<int, int> resolve_output_resolution(const Config& cfg, VideoMode mode);
+
+/**
+ * @brief 현재 비디오 모드에 적용될 인코더 비트레이트 조회
+ * @param cfg 시스템 설정
+ * @param mode 비디오 모드
+ * @return bitrate in bps
+ */
+int resolve_output_bitrate(const Config& cfg, VideoMode mode);
 
 } // namespace utils

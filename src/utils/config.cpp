@@ -75,18 +75,36 @@ Config load_config(const std::string& path) {
                 cfg.fb_width = std::stoi(value);
             } else if (key == "fb_height") {
                 cfg.fb_height = std::stoi(value);
+            } else if (key == "mix_width") {
+                cfg.mix_width = std::stoi(value);
+            } else if (key == "mix_height") {
+                cfg.mix_height = std::stoi(value);
+            } else if (key == "single_width") {
+                cfg.single_width = std::stoi(value);
+            } else if (key == "single_height") {
+                cfg.single_height = std::stoi(value);
             } else if (key == "width") {
-                cfg.width = std::stoi(value);
+                // Legacy fallback: apply the same output size to both mode groups.
+                cfg.mix_width = std::stoi(value);
+                cfg.single_width = cfg.mix_width;
             } else if (key == "height") {
-                cfg.height = std::stoi(value);
+                // Legacy fallback: apply the same output size to both mode groups.
+                cfg.mix_height = std::stoi(value);
+                cfg.single_height = cfg.mix_height;
             } else if (key == "fps") {
                 cfg.fps = std::stoi(value);
             } else if (key == "show_input_labels") {
                 cfg.show_input_labels = (value == "1" || value == "true" || value == "yes" || value == "on");
             } else if (key == "show_wallclock_overlay") {
                 cfg.show_wallclock_overlay = (value == "1" || value == "true" || value == "yes" || value == "on");
+            } else if (key == "mix_bitrate") {
+                cfg.mix_bitrate = std::stoi(value);
+            } else if (key == "single_bitrate") {
+                cfg.single_bitrate = std::stoi(value);
             } else if (key == "bitrate") {
-                cfg.bitrate = std::stoi(value);
+                // Legacy fallback: apply the same bitrate to both mode groups.
+                cfg.mix_bitrate = std::stoi(value);
+                cfg.single_bitrate = cfg.mix_bitrate;
             } else if (key == "codec") {
                 cfg.codec = value;
             } else if (key == "gop_size") {
@@ -99,6 +117,12 @@ Config load_config(const std::string& path) {
                 cfg.wayland_display = value;
             } else if (key == "xdg_runtime_dir") {
                 cfg.xdg_runtime_dir = value;
+            } else if (key == "framebuffer_snapshot_path") {
+                cfg.framebuffer_snapshot_path = value;
+            } else if (key == "framebuffer_snapshot_interval_sec") {
+                cfg.framebuffer_snapshot_interval_sec = std::stoi(value);
+            } else if (key == "framebuffer_snapshot_quality") {
+                cfg.framebuffer_snapshot_quality = std::stoi(value);
             } else if (key == "ai_model") {
                 cfg.ai_model = value;
             } else if (key == "confidence_threshold") {
@@ -115,6 +139,34 @@ Config load_config(const std::string& path) {
     
     logger::info("Config loaded from {}", path);
     return cfg;
+}
+
+std::pair<int, int> resolve_output_resolution(const Config& cfg, VideoMode mode) {
+    switch (mode) {
+        case VideoMode::MIXING_2X2:
+            return {cfg.mix_width, cfg.mix_height};
+        case VideoMode::ONLY_HDMI:
+        case VideoMode::ONLY_CSI:
+        case VideoMode::ONLY_USB:
+        case VideoMode::ONLY_FRAMEBUFFER:
+        case VideoMode::PIP_FB_RIGHT_TOP:
+        default:
+            return {cfg.single_width, cfg.single_height};
+    }
+}
+
+int resolve_output_bitrate(const Config& cfg, VideoMode mode) {
+    switch (mode) {
+        case VideoMode::MIXING_2X2:
+            return cfg.mix_bitrate;
+        case VideoMode::ONLY_HDMI:
+        case VideoMode::ONLY_CSI:
+        case VideoMode::ONLY_USB:
+        case VideoMode::ONLY_FRAMEBUFFER:
+        case VideoMode::PIP_FB_RIGHT_TOP:
+        default:
+            return cfg.single_bitrate;
+    }
 }
 
 } // namespace utils

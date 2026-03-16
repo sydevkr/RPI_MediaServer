@@ -1,64 +1,15 @@
 # 04ISSUES.md
 
-## 문서 역할
-- 이 문서는 개발 중 발견한 특이사항, 설계 결정 이유, 해결한 문제, 반복되는 AI 실수, 주의사항을 누적 기록하는 문서다.
-- 매 작업 마무리 시 기록할 내용이 없는지 항상 검토하고 필요하면 업데이트한다.
-- 다음날 AI는 작업 시작 전에 `docs/03TASKS.md` 다음으로 이 문서를 반드시 참조한다.
+## Raspberry Pi 5 FrameBuffer 캡쳐 관련 이슈 
+- Raspberry Pi 5의 GUI는 Wayland를 사용한다.
+- FrameBuffer 를 실시간 캡쳐하기 위해선는 `wf-recorder` 캡쳐해야 한다. 
+- `wf-recorder` 원격 SSH에서 실행하기 위해서는 Wayland GUI 사용자 세션에 연결된 `systemd --user` service로 제어한다.
+- `start-wfrec.sh`는 `XDG_RUNTIME_DIR`, `WAYLAND_DISPLAY`를 동적으로 찾고 
+- systemd 이 `start-wfrec.sh` 셀을 통해 wf-recorder 를 제어한다.  
+- `wf-recorder -> MediaMTX` direct RTSP publish는 `avio_open failed`로 실패했다.(wf-recorder 방식 스펙아웃)
 
-## AI 작업 시작 시 참조 순서
-1. `docs/01REQUIREMENTS.md`
-2. `docs/02ENVIRONMENT.md`
-3. `docs/03TASKS.md`
-4. `docs/04ISSUES.md`
-
-## 기록 원칙
-- 작업 상태 자체는 `docs/03TASKS.md`에 기록한다.
-- 이 문서에는 "왜 그랬는지", "무엇을 조심해야 하는지", "다음에 같은 실수를 어떻게 피할지"를 남긴다.
-- 새 이슈를 추가할 때는 현상, 원인, 대응, 재발 방지 포인트를 함께 적는다.
-
-## 주요 이슈 및 판단
-
-### 2026-03-12 FrameBuffer 직접 캡처 실패
-- 현상: `ONLY_FRAMEBUFFER` 또는 유사 방식으로 화면 캡처를 시도했지만 검은 화면 또는 장치 미지원 오류가 발생했다.
-- 원인:
-  - `fbdev`: Raspberry Pi 5의 DRM/KMS 환경에서 실제 화면 데이터가 비어 있었다.
-  - `kmsgrab`: 필요한 universal planes 기능이 지원되지 않았다.
-  - `x11grab`: Wayland 세션에서 직접 동작하지 않았다.
-- 대응: Wayland 캡처는 `wf-recorder` 기반 경로로 우회했다.
-- 주의사항:
-  - Wayland 환경에서는 `x11grab`를 전제하지 않는다.
-  - `echo $XDG_SESSION_TYPE`로 세션 타입을 먼저 확인한다.
-  - `FrameBuffer`는 현재 운영 기능이 아니라 재검토 대상이다.
-
-### 2026-03-14 `2x2 Mix` 지연 누적 완화
-- 현상: `2x2 Mix` 실행 시 지연이 시간이 지날수록 증가했다.
-- 현재 판단: `xstack` 자체보다 처리 속도가 입력 속도를 약간 못 따라가며 backlog가 누적된 영향이 컸다.
-- 대응:
-  - 입력 큐를 `thread_queue_size=64`로 축소
-  - `fps=30`, `gop_size=15`로 조정
-  - 오래된 프레임보다 최신 프레임을 우선 처리하도록 변경
-- 주의사항:
-  - 현재 평가는 `USB + black + black + black` 기준이다.
-  - 실제 CSI/HDMI 입력이 붙으면 병목 위치가 달라질 수 있다.
-
-### 2026-03-14 `2x2 Mix`의 실제 의미
-- 현상: 문서와 UI 이름만 보면 실제 4입력 합성처럼 보일 수 있다.
-- 현재 코드 상태: 실질적으로는 `USB 1입력 + black 3칸` 임시 구성이다.
-- 주의사항:
-  - 기능 설명이나 테스트 결과를 공유할 때 “실제 4입력 완성”처럼 표현하지 않는다.
-  - 다중 입력 성능 평가 결과와 혼동하지 않는다.
-
-### 2026-03-14 웹 UI / API 정합성
-- 현상: UI가 서버 실제 모드와 어긋날 가능성이 있었다.
-- 대응:
-  - 페이지 초기 로딩 시 `/api/status`를 먼저 조회
-  - 현재 모드 표시와 버튼 상태를 실제 서버 상태와 맞춤
-- 주의사항:
-  - UI 텍스트만 수정하지 말고 초기 상태 동기화 흐름도 함께 확인한다.
-  - 스트리밍 프로토콜 전환 후 HLS/WebRTC 재연결 동작도 항상 같이 점검한다.
-
-### 반복되는 AI 실수 방지
-- 상태와 이슈를 같은 문서에 섞어 쓰지 않는다.
-- 장비 미연결 상태의 기능을 "검증 완료"로 표현하지 않는다.
-- Wayland, FrameBuffer, X11을 같은 범주의 캡처 방식으로 단순화하지 않는다.
-- `docs/03TASKS.md`는 보드이고, 이 문서는 판단과 함정의 기록이라는 역할 분리를 유지한다.
+## Raspberry Pi 5 FrameBuffer 켭쳐 방식을 이미지 방식으로 처리  
+- 장기 운영성과 단순성을 위해 `grim + ffmpeg` 기반 최신 JPEG 스냅샷 방식으로 전환했다.
+- 현재 `screen` 모드는 WebRTC/HLS 영상이 아니라 HTTP 최신 이미지 갱신 방식이다.
+- 현재 `2x2`의 `FB` 칸은 영상 입력이 아니라 최근 FrameBuffer 스냅샷 이미지를 사용한다.
+- FrameBuffer 스냅샷 루프가 실패해도 `2x2`는 전체 송출을 멈추지 않고 `FB` 칸을 black fallback으로 유지하는 것이 현재 기준이다.

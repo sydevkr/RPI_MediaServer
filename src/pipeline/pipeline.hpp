@@ -40,6 +40,7 @@ extern "C" {
 
 #include <memory>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 #include "utils/config.hpp"
 #include "ai/types.hpp"
@@ -220,6 +221,20 @@ private:
     void overlay_2x2_labels(FramePtr& frame);
 
     /**
+     * @brief 최신 FrameBuffer 스냅샷을 2x2 FB 슬롯에 합성
+     * @param frame 2x2 합성된 프레임
+     */
+    void overlay_framebuffer_snapshot(FramePtr& frame);
+
+    /**
+     * @brief 최신 FrameBuffer 스냅샷을 셀 크기로 디코드/캐시
+     * @param width 목표 셀 너비
+     * @param height 목표 셀 높이
+     * @return 성공 시 YUV420P 프레임, 실패 시 nullptr
+     */
+    FramePtr load_framebuffer_snapshot_frame(int width, int height);
+    
+    /**
      * @brief 프레임에 현재 시각 오버레이
      * @param frame 출력 프레임
      *
@@ -228,6 +243,9 @@ private:
     void overlay_wallclock(FramePtr& frame);
     
     const utils::Config& cfg_;
+    int output_width_ = 0;          ///< 현재 모드에 적용된 출력 너비
+    int output_height_ = 0;         ///< 현재 모드에 적용된 출력 높이
+    int output_bitrate_ = 0;        ///< 현재 모드에 적용된 인코더 비트레이트
     
     // 입력
     InputFormatCtxPtr input_ctx_;      ///< V4L2 입력 포맷 컨텍스트
@@ -262,6 +280,8 @@ private:
     FramePtr black_frame_fb_;          ///< FrameBuffer 자리 검은 프레임
     FramePtr black_frame_csi_;         ///< CSI 자리 검은 프레임
     FramePtr black_frame_hdmi_;        ///< HDMI 자리 검은 프레임
+    FramePtr framebuffer_snapshot_frame_; ///< 최신 FrameBuffer 스냅샷 캐시
+    time_t framebuffer_snapshot_mtime_ = 0; ///< 캐시된 스냅샷 mtime
     
     bool initialized_ = false;         ///< 초기화 완료 플래그
 };

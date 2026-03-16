@@ -41,6 +41,9 @@ paths:
   live:
     source: publisher
     record: false
+  fb:
+    source: publisher
+    record: false
 
 # Global settings
 readTimeout: 10s

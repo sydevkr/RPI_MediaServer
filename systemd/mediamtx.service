@@ -1,0 +1,15 @@
+[Unit]
+Description=RPI_MediaServer MediaMTX Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sypark
+WorkingDirectory=/home/sypark/my_code/RPI_MediaServer
+ExecStart=/usr/local/bin/mediamtx /home/sypark/my_code/RPI_MediaServer/mediamtx.yml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

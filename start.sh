@@ -96,19 +96,14 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Start MediaMTX
-echo -e "${BLUE}▶ Starting MediaMTX...${NC}"
-"$MEDIAMTX_BIN" "$MEDIAMTX_CONF" > /tmp/mediamtx.log 2>&1 &
-MEDIAMTX_PID=$!
-sleep 2
-
-# Check if MediaMTX started
-if ! kill -0 $MEDIAMTX_PID 2>/dev/null; then
-    echo -e "${RED}✗ Failed to start MediaMTX${NC}"
-    echo "Check log: /tmp/mediamtx.log"
+# Check MediaMTX service state
+if ! pgrep -x mediamtx >/dev/null 2>&1; then
+    echo -e "${RED}✗ MediaMTX is not running${NC}"
+    echo "Please start it with: sudo systemctl start mediamtx"
+    echo "Or enable it on boot with: sudo systemctl enable --now mediamtx"
     exit 1
 fi
-echo -e "${GREEN}✓ MediaMTX started (PID: $MEDIAMTX_PID)${NC}"
+echo -e "${GREEN}✓ MediaMTX service is running${NC}"
 
 # Function to print connection info
 print_connection_info() {
@@ -140,8 +135,6 @@ print_connection_info() {
 cleanup() {
     echo ""
     echo -e "${BLUE}▶ Shutting down...${NC}"
-    kill $MEDIAMTX_PID 2>/dev/null
-    wait $MEDIAMTX_PID 2>/dev/null
     echo -e "${GREEN}✓ Shutdown complete${NC}"
     exit 0
 }
@@ -155,5 +148,5 @@ print_connection_info
 echo -e "${BLUE}▶ Starting RPI_MediaServer...${NC}"
 "$SERVER_BIN" "$CONFIG_FILE"
 
-# If server exits, cleanup MediaMTX
+# MediaMTX is managed by systemd, so only the app exits here
 cleanup

@@ -265,6 +265,7 @@ CMakeFiles/RPI_MediaServer.dir/src/pipeline/pipeline.cpp.o: \
  /usr/include/c++/14/bits/stl_bvector.h \
  /usr/include/c++/14/bits/vector.tcc \
  /home/sypark/my_code/RPI_MediaServer/src/utils/config.hpp \
+ /usr/include/c++/14/utility /usr/include/c++/14/bits/stl_relops.h \
  /home/sypark/my_code/RPI_MediaServer/src/utils/logger.hpp \
  /usr/include/c++/14/iostream /usr/include/c++/14/ostream \
  /usr/include/c++/14/ios /usr/include/c++/14/bits/ios_base.h \
@@ -304,4 +305,11 @@ CMakeFiles/RPI_MediaServer.dir/src/pipeline/pipeline.cpp.o: \
  /usr/include/c++/14/bits/algorithmfwd.h \
  /usr/include/c++/14/bits/stl_heap.h \
  /usr/include/c++/14/bits/uniform_int_dist.h \
- /usr/include/c++/14/pstl/glue_algorithm_defs.h
+ /usr/include/c++/14/pstl/glue_algorithm_defs.h \
+ /usr/include/aarch64-linux-gnu/sys/stat.h \
+ /usr/include/aarch64-linux-gnu/bits/stat.h \
+ /usr/include/aarch64-linux-gnu/bits/struct_stat.h \
+ /usr/include/aarch64-linux-gnu/bits/statx.h /usr/include/linux/stat.h \
+ /usr/include/aarch64-linux-gnu/bits/statx-generic.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_statx_timestamp.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_statx.h

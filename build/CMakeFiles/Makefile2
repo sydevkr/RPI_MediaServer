@@ -85,12 +85,12 @@ clean: CMakeFiles/RPI_MediaServer.dir/clean
 CMakeFiles/RPI_MediaServer.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles --progress-num=1,2,3,4,5,6 "Built target RPI_MediaServer"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles --progress-num=1,2,3,4,5,6,7 "Built target RPI_MediaServer"
 .PHONY : CMakeFiles/RPI_MediaServer.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/RPI_MediaServer.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/sypark/my_code/RPI_MediaServer/build/CMakeFiles 6
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/sypark/my_code/RPI_MediaServer/build/CMakeFiles 7
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/RPI_MediaServer.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/sypark/my_code/RPI_MediaServer/build/CMakeFiles 0
 .PHONY : CMakeFiles/RPI_MediaServer.dir/rule
@@ -102,7 +102,7 @@ RPI_MediaServer: CMakeFiles/RPI_MediaServer.dir/rule
 # codegen rule for target.
 CMakeFiles/RPI_MediaServer.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/RPI_MediaServer.dir/build.make CMakeFiles/RPI_MediaServer.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles --progress-num=1,2,3,4,5,6 "Finished codegen for target RPI_MediaServer"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/sypark/my_code/RPI_MediaServer/build/CMakeFiles --progress-num=1,2,3,4,5,6,7 "Finished codegen for target RPI_MediaServer"
 .PHONY : CMakeFiles/RPI_MediaServer.dir/codegen
 
 # clean rule for target.
@@ -117,6 +117,7 @@ CMakeFiles/RPI_MediaServer.dir/clean:
 # No rule that depends on this can have commands that come from listfiles
 # because they might be regenerated.
 cmake_check_build_system:
+	$(CMAKE_COMMAND) -P /home/sypark/my_code/RPI_MediaServer/build/CMakeFiles/VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 0
 .PHONY : cmake_check_build_system
 
