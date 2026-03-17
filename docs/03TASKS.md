@@ -31,27 +31,22 @@
 - [x] `2x2 Mix`의 `FB` 칸 이미지 반영 - 최신 스냅샷 JPEG를 우상단 슬롯에 합성
 - [x] `/framebuffer/latest.jpg` 제공 - 최신 FrameBuffer 이미지 직접 확인 경로 추가
 - [x] `FrameBuffer` 스냅샷 기반 운영 안정화 - `screen` 5초 갱신, `2x2 FB` 칸 반영, GUI 세션 의존성 점검
+- [x] 모드 전환 시 해상도 자동 반영 확인 HLS, WebRTC 기준
+- [x] 모드 전환 시 wallclock 오버레이 위치/크기 반영 확인 - `2x2` 좌상단, 싱글 우상단 기준
+- [x] USB `720p` 비트레이트 품질 비교 - `single_bitrate=10000000` 기준, 필요 시 `8000000` 재비교
 
 ## 진행 중
 
 ## 예정
-- [ ] 모드 전환 시 해상도 자동 반영 확인 - `/api/status`, HLS, WebRTC 기준
-- [ ] 모드 전환 시 비트레이트 자동 반영 확인 - 인코더 로그 기준
-- [ ] 모드 전환 시 wallclock 오버레이 위치/크기 반영 확인 - `2x2` 좌상단, 싱글 우상단 기준
-- [ ] 입력 장치별 지원 해상도 확인 - USB/CSI/HDMI에서 `1280x720` 협상 여부 점검
-- [ ] USB `720p` 비트레이트 품질 비교 - `single_bitrate=10000000` 기준, 필요 시 `8000000` 재비교
 - [ ] `CSI Camera` 실입력 확인 - 장비 연결 후 화면 수신 확인
 - [ ] `CSI Camera` 해상도 / FPS 측정 - 실제 입력 스펙 기록 필요
 - [ ] `CSI Camera` HLS / WebRTC 지연 확인 - 스트리밍 안정성 포함
 - [ ] `HDMI Capture` 실입력 확인 - 장비 연결 후 입력 확인
 - [ ] `HDMI Capture` 입력 포맷 / FPS 측정 - 실제 포맷 기록 필요
 - [ ] `HDMI Capture` 장시간 송출 안정성 확인 - 장시간 동작 테스트 필요
-- [ ] `wf-recorder` 원격 SSH 제어 환경 정리 - `systemd --user` service, `start-wfrec.sh`, Wayland 환경 자동 탐지 기준 문서화
-- [ ] 실제 `USB + CSI + HDMI` 기반 `2x2 Mix` 구성 - black 3칸 대체 시작
-- [ ] 실제 3입력 `2x2 Mix` 입력별 FPS 측정 - 성능 병목 확인
-- [ ] 실제 3입력 `2x2 Mix` 전체 지연 측정 - HLS / WebRTC 비교 포함
-- [ ] 실제 3입력 `2x2 Mix` 모드 전환 안정성 확인 - 런타임 전환 기준
+
 - [ ] Hailo 장비 도착 후 추론 연동 검증 - 현재는 비활성 상태
+
 - [ ] USB Camera AI 사람 인식 - Hailo 연동 후 구현
 - [ ] USB Camera AI 화재 인식 - 모델/룰 정의 필요
 - [ ] USB Camera AI 위기상황 인식 - 기준 정의 필요
@@ -60,9 +55,10 @@
 - [ ] CSI Camera AI 위기상황 인식 - 실입력 검증 후 진행
 - [ ] HDMI Capture AI OCR - 입력 특성 확인 후 진행
 - [ ] HDMI Capture AI 위기상황 인식 - OS 모니터링 기반
+
 - [ ] USB-C HID OTG 인식 확인 - PC에서 HID 장치 인식 확인
 - [ ] GPIO 전원 + USB-C HID OTG 동시 구성 확인 - 동시 사용 가능 여부 확인
-- [ ] AI HAT + GPIO 전원 + USB-C HID OTG 동시 구성 확인 - 충돌 여부 및 안정성 확인
+
 - [ ] 장시간 전원 안정성 / 발열 / 재부팅 여부 확인 - 운영 적합성 판단용
 
 ## 막힘

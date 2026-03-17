@@ -395,12 +395,14 @@ bool Pipeline::init_filter_graph() {
  * USB + color(color=black) 3개 → xstack → 2x2 출력
  */
 bool Pipeline::init_filter_graph_2x2() {
+
     const AVFilter* buffersrc = avfilter_get_by_name("buffer");
     const AVFilter* color = avfilter_get_by_name("color");
     const AVFilter* scale = avfilter_get_by_name("scale");
     const AVFilter* hflip = avfilter_get_by_name("hflip");
     const AVFilter* format = avfilter_get_by_name("format");
     const AVFilter* xstack = avfilter_get_by_name("xstack");
+
     int cell_w = output_width_ / 2;
     int cell_h = output_height_ / 2;
     std::string fps_str = std::to_string(cfg_.fps);
@@ -535,6 +537,7 @@ bool Pipeline::init_filter_graph_2x2() {
  * libx264 소프트웨어 인코딩 - low-latency 설정
  */
 bool Pipeline::init_encoder() {
+
     const AVCodec* encoder = avcodec_find_encoder_by_name(cfg_.codec.c_str());
     if (!encoder) {
         logger::error("Encoder {} not found", cfg_.codec);
@@ -641,7 +644,10 @@ bool Pipeline::init_output() {
  * @return 필터링된 프레임, 실패시 nullptr
  */
 FramePtr Pipeline::capture() {
+
     auto capture_started = std::chrono::steady_clock::now();
+    
+    // std::unique_ptr<AVPacket, AVPacketDeleter>
     PacketPtr pkt(av_packet_alloc());
     if (!pkt) return nullptr;
 
@@ -649,6 +655,7 @@ FramePtr Pipeline::capture() {
     static int dropped_filter_frames = 0;
     
     int ret;
+    
     while ((ret = av_read_frame(input_ctx_.get(), pkt.get())) >= 0) {
         if (pkt->stream_index == video_stream_idx_) {
             // 패킷을 디코더로 전송
@@ -694,6 +701,7 @@ FramePtr Pipeline::capture() {
             }
             
             // 필터링된 프레임 수신 - 2x2에서는 최신 결과만 유지
+            // 마지막 프레임만 읽는다. 
             FramePtr result;
             while (true) {
                 FramePtr candidate(av_frame_alloc());

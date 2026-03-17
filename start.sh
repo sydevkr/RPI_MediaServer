@@ -96,6 +96,10 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+pkill -f './build/RPI_MediaServer ./config.ini' || true
+echo "Killing RPI_MediaServer"
+sleep 1
+
 # Check MediaMTX service state
 if ! pgrep -x mediamtx >/dev/null 2>&1; then
     echo -e "${RED}✗ MediaMTX is not running${NC}"

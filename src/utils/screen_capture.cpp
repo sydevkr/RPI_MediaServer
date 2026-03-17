@@ -29,6 +29,13 @@ void set_env_if_present(const std::string& key, const std::string& value) {
     }
 }
 
+std::pair<int, int> resolve_snapshot_resolution(const Config& cfg) {
+    if (cfg.video_mode == VideoMode::ONLY_FRAMEBUFFER) {
+        return {std::max(1, cfg.single_width), std::max(1, cfg.single_height)};
+    }
+    return {std::max(1, cfg.fb_width), std::max(1, cfg.fb_height)};
+}
+
 } // namespace
 
 ScreenCapture::ScreenCapture(const Config& cfg) : cfg_(cfg) {}
@@ -88,14 +95,16 @@ bool ScreenCapture::start() {
     const std::string tmp_jpg = snapshot_path + ".tmp.jpg";
     const int interval_sec = std::max(1, cfg_.framebuffer_snapshot_interval_sec);
     const int quality = std::max(2, cfg_.framebuffer_snapshot_quality);
+    const auto [snapshot_width, snapshot_height] = resolve_snapshot_resolution(cfg_);
 
     std::ostringstream command;
     command
         << "set -e\n"
         << "while true; do\n"
         << "  " << kGrimPath << " '" << tmp_png << "'\n"
-        << "  " << kFfmpegPath << " -loglevel error -y -i '" << tmp_png << "' -q:v " << quality
-        << " '" << tmp_jpg << "'\n"
+        << "  " << kFfmpegPath << " -loglevel error -y -i '" << tmp_png << "'"
+        << " -vf 'scale=" << snapshot_width << ":" << snapshot_height << "'"
+        << " -q:v " << quality << " '" << tmp_jpg << "'\n"
         << "  mv -f '" << tmp_jpg << "' '" << snapshot_path << "'\n"
         << "  rm -f '" << tmp_png << "'\n"
         << "  sleep " << interval_sec << "\n"
@@ -117,8 +126,8 @@ bool ScreenCapture::start() {
         _exit(127);
     }
 
-    logger::info("Started framebuffer snapshot loop (PID {}) writing to {}",
-                 child_pid_, cfg_.framebuffer_snapshot_path);
+    logger::info("Started framebuffer snapshot loop (PID {}) writing {}x{} snapshots to {}",
+                 child_pid_, snapshot_width, snapshot_height, cfg_.framebuffer_snapshot_path);
     return true;
 }
 

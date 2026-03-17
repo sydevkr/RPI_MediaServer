@@ -1,6 +1,6 @@
 /**
  * RPI MediaServer - Web UI Controller
- * Mode switches keep a loading state and reload the page when the new stream is ready.
+ * Mode switches keep a loading state and reconnect in-place when the new stream is ready.
  */
 
 const CONFIG = {
@@ -29,6 +29,7 @@ let pendingSwitchSeq = 0;
 let statusPollTimer = null;
 let framebufferRefreshTimer = null;
 let framebufferSnapshotIntervalMs = 5000;
+let placeholderHideTimer = null;
 
 const HLS_MAX_RETRIES = 5;
 const HLS_RETRY_DELAY_MS = 1500;
@@ -62,6 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     updateModeUI();
+    syncBrowserUrl();
     startStream();
     startStatusPolling();
 
@@ -87,12 +89,12 @@ function addCacheBuster(url) {
     return `${url}${separator}ts=${Date.now()}`;
 }
 
-function buildReloadUrl() {
+function syncBrowserUrl() {
     const url = new URL(window.location.href);
     url.searchParams.set('ip', CONFIG.serverIP);
     url.searchParams.set('protocol', currentProtocol);
     url.searchParams.set('mode', displayedMode);
-    return url.toString();
+    window.history.replaceState({}, '', url);
 }
 
 function detachHLSPlayer() {
@@ -131,7 +133,98 @@ function refreshFramebufferImage() {
     image.src = addCacheBuster(getFramebufferImageUrl());
 }
 
-function startFramebufferImageMode() {
+function clearPlaceholderHideTimer() {
+    if (placeholderHideTimer) {
+        clearTimeout(placeholderHideTimer);
+        placeholderHideTimer = null;
+    }
+}
+
+function placeholderDelayMs(protocolLabel) {
+    if (protocolLabel === 'RTSP/HLS') {
+        return 2000;
+    }
+    if (protocolLabel === 'WebRTC') {
+        return 1000;
+    }
+    return 0;
+}
+
+function schedulePlaceholderHide(connectToken, protocolLabel) {
+    clearPlaceholderHideTimer();
+    const delayMs = placeholderDelayMs(protocolLabel);
+
+    placeholderHideTimer = setTimeout(() => {
+        placeholderHideTimer = null;
+        if (connectToken !== protocolConnectToken) {
+            return;
+        }
+        hidePlaceholder();
+    }, delayMs);
+}
+
+function finalizeMediaReady(connectToken, onConnected, statusMessage, protocolLabel, resolution = '-', bitrate = '-') {
+    if (connectToken !== protocolConnectToken) {
+        return;
+    }
+
+    if (isModeSwitching) {
+        completeModeSwitchUI();
+    }
+
+    updateStatus(statusMessage, 'connected');
+    updateProtocolBadge(protocolLabel);
+    updateStats(protocolLabel, resolution, bitrate);
+    syncBrowserUrl();
+    schedulePlaceholderHide(connectToken, protocolLabel);
+
+    if (typeof onConnected === 'function') {
+        onConnected();
+    }
+}
+
+function waitForImageReady(image, connectToken, onConnected) {
+    const handleLoad = () => {
+        image.onload = null;
+        image.onerror = null;
+        finalizeMediaReady(connectToken, onConnected, 'FrameBuffer 이미지 갱신 중...', 'IMAGE', 'snapshot', '5s');
+    };
+
+    const handleError = () => {
+        image.onload = null;
+        image.onerror = null;
+        if (connectToken !== protocolConnectToken) {
+            return;
+        }
+        if (isModeSwitching) {
+            failModeSwitchUI('FrameBuffer 이미지를 불러오지 못했습니다.');
+            return;
+        }
+        showPlaceholder('FrameBuffer 로드 실패', '최신 이미지를 불러오지 못했습니다.');
+        updateStatus('FrameBuffer 이미지 로드 실패', 'error');
+    };
+
+    image.onload = handleLoad;
+    image.onerror = handleError;
+}
+
+function waitForVideoReady(video, connectToken, onConnected, statusMessage, protocolLabel) {
+    const finalize = () => {
+        video.removeEventListener('loadeddata', finalize);
+        video.removeEventListener('playing', finalize);
+
+        const resolution = video.videoWidth && video.videoHeight
+            ? `${video.videoWidth}x${video.videoHeight}`
+            : '-';
+        finalizeMediaReady(connectToken, onConnected, statusMessage, protocolLabel, resolution, '-');
+    };
+
+    video.addEventListener('loadeddata', finalize, { once: true });
+    video.addEventListener('playing', finalize, { once: true });
+}
+
+function startFramebufferImageMode(options = {}) {
+    const { connectToken = protocolConnectToken } = options;
     clearHLSRetry();
     clearWebRTCRetry();
     clearFramebufferRefresh();
@@ -140,15 +233,9 @@ function startFramebufferImageMode() {
     showVideoPlayer();
     hideWebRTC();
     showFramebufferImage();
+    waitForImageReady(document.getElementById('framebuffer-image'), connectToken, null);
     refreshFramebufferImage();
-    updateStatus('FrameBuffer 이미지 갱신 중...', 'connected');
-    updateProtocolBadge('IMAGE');
-    updateStats('IMAGE', 'snapshot', '5s');
-    if (isModeSwitching) {
-        completeModeSwitchUI();
-    } else {
-        hidePlaceholder();
-    }
+    updateStatus('FrameBuffer 이미지 로딩 중...', 'loading');
 
     const tick = () => {
         refreshFramebufferImage();
@@ -179,6 +266,7 @@ function enterModeSwitchUI() {
     isModeSwitching = true;
     protocolConnectToken += 1;
     disableModeButtons(true);
+    clearPlaceholderHideTimer();
     clearStreamProbe();
     clearHLSRetry();
     clearWebRTCRetry();
@@ -197,7 +285,6 @@ function completeModeSwitchUI() {
     pendingMode = null;
     pendingSwitchSeq = 0;
     disableModeButtons(false);
-    hidePlaceholder();
     updateModeUI();
 }
 
@@ -205,6 +292,7 @@ function failModeSwitchUI(message) {
     isModeSwitching = false;
     pendingMode = null;
     pendingSwitchSeq = 0;
+    clearPlaceholderHideTimer();
     disableModeButtons(false);
     showPlaceholder('모드 전환 실패', message);
     updateStatus(message, 'error');
@@ -221,7 +309,7 @@ async function waitForStreamReadyAndReconnect() {
     const connectToken = ++protocolConnectToken;
     clearStreamProbe();
     streamReadyProbeStartedAt = Date.now();
-    showPlaceholder('새 스트림 연결 확인 중...', '준비가 끝나면 현재 페이지를 자동으로 다시 불러옵니다.');
+    showPlaceholder('새 스트림 연결 확인 중...', '현재 페이지에서 새 스트림으로 다시 연결합니다.');
     updateStatus('새 스트림 연결 확인 중...', 'loading');
 
     const poll = async () => {
@@ -260,7 +348,11 @@ async function waitForStreamReadyAndReconnect() {
 
         if (pipelineState === 'running' && modeReady && streamReady && switchCompleted) {
             clearStreamProbe();
-            window.location.replace(buildReloadUrl());
+            displayedMode = isSupportedMode(statusMode) ? statusMode : displayedMode;
+            pendingMode = null;
+            pendingSwitchSeq = lastCompletedSwitchSeq;
+            updateModeUI();
+            reconnectForCurrentMode(connectToken);
             return;
         }
 
@@ -283,9 +375,30 @@ function clearStreamProbe() {
     }
 }
 
+function reconnectForCurrentMode(connectToken = protocolConnectToken) {
+    clearPlaceholderHideTimer();
+
+    if (displayedMode === 'screen') {
+        startFramebufferImageMode({ connectToken });
+        return;
+    }
+
+    if (currentProtocol === 'hls') {
+        startHLS({
+            connectToken,
+            onError: () => failModeSwitchUI('HLS 재연결에 실패했습니다.')
+        });
+        return;
+    }
+
+    startWebRTC({
+        connectToken,
+        onError: () => failModeSwitchUI('WebRTC 재연결에 실패했습니다.')
+    });
+}
+
 function startHLS(options = {}) {
     const {
-        keepPlaceholder = false,
         onConnected = null,
         onError = null,
         connectToken = protocolConnectToken
@@ -320,18 +433,10 @@ function startHLS(options = {}) {
                 return;
             }
             hlsRetryCount = 0;
+            waitForVideoReady(video, connectToken, onConnected, 'HLS 연결됨', 'RTSP/HLS');
             video.play();
-            if (!keepPlaceholder) {
-                completeModeSwitchUI();
-            }
-            updateStatus('HLS 연결됨', 'connected');
-            updateProtocolBadge('RTSP/HLS');
-            updateStats('HLS', '-', '-');
             showVideoPlayer();
             hideWebRTC();
-            if (typeof onConnected === 'function') {
-                onConnected();
-            }
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
@@ -356,17 +461,10 @@ function startHLS(options = {}) {
                 return;
             }
             hlsRetryCount = 0;
+            waitForVideoReady(video, connectToken, onConnected, 'HLS 연결됨 (Native)', 'RTSP/HLS');
             video.play();
-            if (!keepPlaceholder) {
-                completeModeSwitchUI();
-            }
-            updateStatus('HLS 연결됨 (Native)', 'connected');
-            updateProtocolBadge('RTSP/HLS');
             showVideoPlayer();
             hideWebRTC();
-            if (typeof onConnected === 'function') {
-                onConnected();
-            }
         }, { once: true });
     } else {
         updateStatus('HLS를 지원하지 않는 브라우저', 'error');
@@ -378,7 +476,6 @@ function startHLS(options = {}) {
 
 function startWebRTC(options = {}) {
     const {
-        keepPlaceholder = false,
         onConnected = null,
         onError = null,
         connectToken = protocolConnectToken
@@ -403,17 +500,9 @@ function startWebRTC(options = {}) {
             if (connectToken !== protocolConnectToken) {
                 return;
             }
-            if (!keepPlaceholder) {
-                completeModeSwitchUI();
-            }
-            updateStatus('WebRTC 연결됨', 'connected');
-            updateProtocolBadge('WebRTC');
-            updateStats('WebRTC', '-', '-');
             hideVideoPlayer();
             showWebRTC();
-            if (typeof onConnected === 'function') {
-                onConnected();
-            }
+            finalizeMediaReady(connectToken, onConnected, 'WebRTC 연결됨', 'WebRTC', '-', '-');
         };
         frame.onerror = () => {
             if (connectToken !== protocolConnectToken) {
@@ -432,15 +521,7 @@ function startWebRTC(options = {}) {
 }
 
 function startStream() {
-    if (displayedMode === 'screen') {
-        startFramebufferImageMode();
-        return;
-    }
-    if (currentProtocol === 'hls') {
-        startHLS();
-    } else {
-        startWebRTC();
-    }
+    reconnectForCurrentMode();
 }
 
 function updateProtocolButtons() {
@@ -452,6 +533,7 @@ function switchToHLS() {
     if (currentProtocol === 'hls') return;
     currentProtocol = 'hls';
     updateProtocolButtons();
+    syncBrowserUrl();
 
     if (isModeSwitching) {
         return;
@@ -469,6 +551,7 @@ function switchToWebRTC() {
     if (currentProtocol === 'webrtc') return;
     currentProtocol = 'webrtc';
     updateProtocolButtons();
+    syncBrowserUrl();
 
     if (isModeSwitching) {
         return;
@@ -586,7 +669,7 @@ function syncModeStateFromStatus(status) {
     const switchSeq = Number(status?.switch_seq || 0);
     const lastCompletedSwitchSeq = Number(status?.last_completed_switch_seq || 0);
 
-    if (isSupportedMode(statusMode)) {
+    if (isSupportedMode(statusMode) && (!isModeSwitching || !pendingMode || statusMode === pendingMode)) {
         displayedMode = statusMode;
     }
 

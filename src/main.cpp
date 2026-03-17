@@ -276,6 +276,7 @@ int main(int argc, char** argv) {
         g_pipeline_state.store(PIPELINE_RESTARTING);
         
         while (g_running) {
+            
             utils::Config current_config;
             utils::VideoMode requested_mode;
             std::unique_ptr<utils::ScreenCapture> snapshot_capture;
