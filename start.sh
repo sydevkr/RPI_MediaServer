@@ -1,11 +1,20 @@
 #!/bin/bash
 
 # RPI_MediaServer Startup Script
-
-# Always run from this script's directory so relative paths (./web, ./build, ./config.ini) are stable.
+################################################################
+# [1] 실행 위치 고정 - 스크립트 위치 기준으로 상대경로 안정화
+################################################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+
+
+
+
+
+################################################################
+# [2] 경로 및 설정 변수
+################################################################
 MEDIAMTX_BIN=${MEDIAMTX_BIN:-/usr/local/bin/mediamtx}
 MEDIAMTX_CONF=${MEDIAMTX_CONF:-./mediamtx.yml}
 SERVER_BIN=${SERVER_BIN:-./build/RPI_MediaServer}
@@ -21,11 +30,21 @@ NC='\033[0m'
 
 echo -e "${CYAN}=== RPI_MediaServer Remote Guard ===${NC}"
 
-# Get IP address (127.x 제외, 10.1.x 우선, 그 외 사설망 IP)
+
+
+
+
+
+
+
+
+################################################################
+# [3] 서버 IP 자동 감지 (10.1.x 우선, 사설망, fallback 127.0.0.1)
+################################################################
 get_ip_address() {
     local ips=$(hostname -I)
     local preferred_ip=""
-    
+
     # 10.1.x.x 대역 우선 검색
     for ip in $ips; do
         if [[ "$ip" =~ ^10\.1\. ]]; then
@@ -33,7 +52,7 @@ get_ip_address() {
             break
         fi
     done
-    
+
     # 10.1.x.x 없으면 다른 사설망 IP 검색 (127.x 제외)
     if [ -z "$preferred_ip" ]; then
         for ip in $ips; do
@@ -44,12 +63,12 @@ get_ip_address() {
             fi
         done
     fi
-    
+
     # 사설망 IP 없으면 127.0.0.1 사용
     if [ -z "$preferred_ip" ]; then
         preferred_ip="127.0.0.1"
     fi
-    
+
     echo "$preferred_ip"
 }
 
@@ -65,12 +84,22 @@ WF_RECORDER_BIN=$(grep "^wf_recorder_path=" "$CONFIG_FILE" 2>/dev/null | cut -d'
 if [ -z "$WF_RECORDER_BIN" ]; then
     WF_RECORDER_BIN="/usr/bin/wf-recorder"
 fi
+
 # Replace localhost with actual IP for external access
 RTSP_URL_EXTERNAL=${RTSP_URL/localhost/$IP_ADDRESS}
 WEBRTC_URL="http://$IP_ADDRESS:8889/live"
 
+
+
+
+
+
+################################################################
+# [4] 사전 조건 체크 (바이너리, 설정파일, wf-recorder)
+################################################################
+
 # Check for root (needed for V4L2)
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     echo -e "${YELLOW}⚠ Warning: Running without root may cause V4L2 permission issues${NC}"
 fi
 
@@ -100,7 +129,13 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Stop any previously running server process (match exact process name only)
+
+
+
+
+################################################################
+# [5] 기존 RPI_MediaServer 프로세스 정리
+################################################################
 OLD_PIDS=$(pgrep -x 'RPI_MediaServer' || true)
 if [ -n "$OLD_PIDS" ]; then
     echo "Stopping existing RPI_MediaServer: $OLD_PIDS"
@@ -117,7 +152,14 @@ else
     echo "No existing RPI_MediaServer process found"
 fi
 
-# Check/start MediaMTX service state
+
+
+
+
+
+################################################################
+# [6] MediaMTX 서비스 기동 확인 및 시작
+################################################################
 if ! pgrep -x mediamtx >/dev/null 2>&1; then
     echo -e "${YELLOW}⚠ MediaMTX is not running. Trying to start...${NC}"
 
@@ -150,7 +192,15 @@ if ! pgrep -x mediamtx >/dev/null 2>&1; then
 fi
 echo -e "${GREEN}✓ MediaMTX service is running${NC}"
 
-# Function to print connection info
+
+
+
+
+
+
+################################################################
+# [7] 접속 정보 출력
+################################################################
 print_connection_info() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -176,7 +226,16 @@ print_connection_info() {
     echo ""
 }
 
-# Function to cleanup on exit
+
+
+
+
+
+
+
+################################################################
+# [8] 종료 핸들러 (Ctrl+C / SIGTERM)
+################################################################
 cleanup() {
     echo ""
     echo -e "${BLUE}▶ Shutting down...${NC}"
@@ -189,7 +248,7 @@ trap cleanup SIGINT SIGTERM
 # Print connection info
 print_connection_info
 
-# Start server
+# [9] C++ 서버 실행
 echo -e "${BLUE}▶ Starting RPI_MediaServer...${NC}"
 "$SERVER_BIN" "$CONFIG_FILE"
 
