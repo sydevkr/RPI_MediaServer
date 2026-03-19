@@ -26,6 +26,9 @@
 - [x] 입력 라벨 오버레이 정리 - `USB / FB / CSI / HDMI` 라벨 표시
 - [x] wallclock 오버레이 정리 - end-to-end 지연 관찰용
 - [x] 웹 UI 비디오 모드 메뉴 정리 - `FrameBuffer` 비활성 표시 포함
+- [x] 웹 UI 레이아웃 좌우 재배치 - 좌측 제어패널 / 우측 비디오 구조로 정리
+- [x] 웹 UI AI 메뉴 삽입/순서 고정 - `스트리밍모드 -> AI메뉴 -> 비디오모드` 적용
+- [x] `start.sh` 실행 경로 고정 - 스크립트 위치 기준으로 `./web`/`./build` 상대경로 안정화
 - [x] `FrameBuffer` 이미지 스냅샷 경로 반영 - `grim + ffmpeg` 기반 최신 JPEG 생성
 - [x] `screen` 모드 이미지 뷰 전환 - `5초` 주기 최신 이미지 갱신
 - [x] `2x2 Mix`의 `FB` 칸 이미지 반영 - 최신 스냅샷 JPEG를 우상단 슬롯에 합성
@@ -34,6 +37,14 @@
 - [x] 모드 전환 시 해상도 자동 반영 확인 HLS, WebRTC 기준
 - [x] 모드 전환 시 wallclock 오버레이 위치/크기 반영 확인 - `2x2` 좌상단, 싱글 우상단 기준
 - [x] USB `720p` 비트레이트 품질 비교 - `single_bitrate=10000000` 기준, 필요 시 `8000000` 재비교
+- [x] 웹UI AI 메뉴 추가 (비디오프레임 위쪽, 싱글모드일때만 활성화)
+
+- [x] 웹UI AI 객체 인식 Rect 만들기 - 타입별 색상(연두/주황/빨강/하늘), 라벨, 선택/해제 토글
+- [x] 웹UI AI 메뉴 순서 확정 - 사람, 위기, 화재, OCR
+- [x] 웹UI AI Rect 우측 상단 가로 정렬 - 여러 개 선택 시 우측 끝에서 좌측으로 배치, 겹치지 않음
+- [x] 웹UI AI Rect RTSP/HLS 라벨 아래 표시 - video-overlay 높이 기준 동적 offset
+- [x] 웹UI AI Rect 선 굵기 4px
+- [x] 웹UI AI Rect WebRTC 모드에서도 유지 - stream-wrapper 구조로 ai-rects-container 이동
 
 ## 진행 중
 

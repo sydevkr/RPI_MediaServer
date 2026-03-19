@@ -104,6 +104,13 @@ void signal_handler(int sig) {
  */
 void run_http_server(int port = 8081) {
     httplib::Server server;
+
+    // Prevent browsers from reusing stale Web UI assets across restarts.
+    server.set_default_headers({
+        {"Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"},
+        {"Pragma", "no-cache"},
+        {"Expires", "0"}
+    });
     
     // 정적 Web UI 제공
     server.set_base_dir("./web");

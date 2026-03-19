@@ -30,6 +30,21 @@ let statusPollTimer = null;
 let framebufferRefreshTimer = null;
 let framebufferSnapshotIntervalMs = 5000;
 let placeholderHideTimer = null;
+let selectedAIFeatures = new Set();
+let savedAIFeaturesFor2x2 = null;  // 2x2 진입 전 선택값 백업
+
+const AI_RECT_CONFIG = {
+    person: { color: '#7fff7f', label: '사람' },
+    crisis: { color: '#ff8c00', label: '위기' },
+    fire:   { color: '#ff3333', label: '화재' },
+    ocr:    { color: '#87ceeb', label: 'OCR'  }
+};
+const AI_RECT_ORDER  = ['person', 'crisis', 'fire', 'ocr'];
+const AI_RECT_WIDTH  = 160;
+const AI_RECT_HEIGHT = 100;
+const AI_RECT_GAP    = 12;
+const AI_RECT_RIGHT  = 16;
+const AI_RECT_MARGIN_TOP = 8;  // video-overlay 하단과의 간격
 
 const HLS_MAX_RETRIES = 5;
 const HLS_RETRY_DELAY_MS = 1500;
@@ -38,10 +53,20 @@ const WEBRTC_RETRY_DELAY_MS = 1200;
 const STATUS_POLL_INTERVAL_MS = 3000;
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const redirected = await ensureCanonicalUrl();
+    if (redirected) {
+        return;
+    }
+
+    ensureAIMenuSection();
+    stabilizeMainLayout();
+    window.addEventListener('resize', stabilizeMainLayout);
+
     const urlParams = new URLSearchParams(window.location.search);
     const ipParam = urlParams.get('ip');
     const protocolParam = urlParams.get('protocol');
     const modeParam = urlParams.get('mode');
+    const aiParam = urlParams.get('ai');
 
     if (ipParam) {
         CONFIG.serverIP = ipParam;
@@ -53,7 +78,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentProtocol = protocolParam;
     }
 
+    try {
+        const saved = JSON.parse(window.localStorage.getItem('selectedAIFeatures')) || [];
+        saved.filter(isSupportedAIFeature).forEach(f => selectedAIFeatures.add(f));
+    } catch {}
+    if (aiParam) {
+        aiParam.split(',').filter(isSupportedAIFeature).forEach(f => selectedAIFeatures.add(f));
+    }
+
     updateProtocolButtons();
+    updateAIFeatureUI();
 
     const serverStatus = await fetchServerStatus();
     if (serverStatus && isSupportedMode(serverStatus.mode)) {
@@ -64,7 +98,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updateModeUI();
     syncBrowserUrl();
-    startStream();
+
+    // 이미 파이프라인이 준비된 경우 즉시 연결, 아직 준비 중이면 대기 후 연결
+    if (serverStatus?.pipeline_state === 'running' && serverStatus?.stream_ready) {
+        startStream();
+    } else {
+        startStreamWhenReady();
+    }
+
     startStatusPolling();
 
     const video = document.getElementById('video-player');
@@ -89,12 +130,218 @@ function addCacheBuster(url) {
     return `${url}${separator}ts=${Date.now()}`;
 }
 
+async function ensureCanonicalUrl() {
+    const currentUrl = new URL(window.location.href);
+    const params = currentUrl.searchParams;
+    let changed = false;
+
+    if (!params.get('ip')) {
+        params.set('ip', window.location.hostname);
+        changed = true;
+    }
+
+    if (!params.get('protocol')) {
+        params.set('protocol', 'hls');
+        changed = true;
+    }
+
+    if (!params.get('mode')) {
+        let resolvedMode = '2x2';
+        try {
+            const response = await fetch('/api/status', { cache: 'no-store' });
+            if (response.ok) {
+                const status = await response.json();
+                if (isSupportedMode(status?.mode)) {
+                    resolvedMode = normalizeMode(status.mode);
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to resolve current mode for URL normalization:', error);
+        }
+        params.set('mode', resolvedMode);
+        changed = true;
+    }
+
+    if (!params.has('ai')) {
+        try {
+            const saved = JSON.parse(window.localStorage.getItem('selectedAIFeatures')) || [];
+            params.set('ai', saved.filter(isSupportedAIFeature).join(','));
+        } catch {
+            params.set('ai', '');
+        }
+        changed = true;
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    window.location.replace(currentUrl.toString());
+    return true;
+}
+
 function syncBrowserUrl() {
     const url = new URL(window.location.href);
     url.searchParams.set('ip', CONFIG.serverIP);
     url.searchParams.set('protocol', currentProtocol);
     url.searchParams.set('mode', displayedMode);
+    url.searchParams.set('ai', [...selectedAIFeatures].join(','));
     window.history.replaceState({}, '', url);
+}
+
+function isSupportedAIFeature(feature) {
+    return feature === 'person'
+        || feature === 'fire'
+        || feature === 'crisis'
+        || feature === 'ocr';
+}
+
+function getAIFeaturesLabel(features) {
+    const labels = { person: '사람', fire: '화재', crisis: '위기', ocr: 'OCR' };
+    if (!features || features.size === 0) return '';
+    return [...features].map(f => labels[f] || f).join(', ');
+}
+
+function createAIMenuSection() {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'ai-toolbar';
+    toolbar.innerHTML = `
+        <span class="ai-toolbar-label">AI 분석</span>
+        <button id="btn-ai-person" class="btn ai-btn" onclick="selectAIFeature('person')">🧍 사람</button>
+        <button id="btn-ai-crisis" class="btn ai-btn" onclick="selectAIFeature('crisis')">🚨 위기</button>
+        <button id="btn-ai-fire" class="btn ai-btn" onclick="selectAIFeature('fire')">🔥 화재</button>
+        <button id="btn-ai-ocr" class="btn ai-btn" onclick="selectAIFeature('ocr')">🔤 OCR</button>
+        <span id="ai-feature-label" class="ai-toolbar-status"></span>
+    `;
+    return toolbar;
+}
+
+function ensureAIMenuSection() {
+    const videoSection = document.querySelector('.video-section');
+    if (!videoSection || document.getElementById('btn-ai-person')) {
+        return;
+    }
+
+    const toolbar = createAIMenuSection();
+    const videoContainer = videoSection.querySelector('.video-container');
+    videoSection.insertBefore(toolbar, videoContainer);
+}
+
+function stabilizeMainLayout() {
+    const mainContent = document.querySelector('.main-content');
+    const controlPanel = document.querySelector('.control-panel');
+    const videoSection = document.querySelector('.video-section');
+    if (!mainContent || !controlPanel || !videoSection) {
+        return;
+    }
+
+    if (mainContent.firstElementChild !== controlPanel) {
+        mainContent.insertBefore(controlPanel, videoSection);
+    }
+
+    // CSS 클래스가 레이아웃을 담당하므로 인라인 스타일을 모두 제거해 CSS에 위임
+    mainContent.style.removeProperty('display');
+    mainContent.style.removeProperty('flex-direction');
+    mainContent.style.removeProperty('grid-template-columns');
+    mainContent.style.removeProperty('grid-template-areas');
+    mainContent.style.removeProperty('direction');
+    mainContent.style.removeProperty('align-items');
+    controlPanel.style.removeProperty('grid-area');
+    controlPanel.style.removeProperty('grid-column');
+    controlPanel.style.removeProperty('order');
+    videoSection.style.removeProperty('grid-area');
+    videoSection.style.removeProperty('grid-column');
+    videoSection.style.removeProperty('order');
+}
+
+function updateAIFeatureUI() {
+    document.querySelectorAll('.ai-btn').forEach((btn) => {
+        btn.classList.remove('active');
+    });
+
+    selectedAIFeatures.forEach(feature => {
+        const btn = document.getElementById(`btn-ai-${feature}`);
+        if (btn) btn.classList.add('active');
+    });
+
+    const featureLabel = document.getElementById('ai-feature-label');
+    if (featureLabel) {
+        featureLabel.textContent = getAIFeaturesLabel(selectedAIFeatures);
+    }
+    updateAIRects();
+}
+
+function updateAIToolbarForMode(mode) {
+    const disabled = (mode === '2x2');
+
+    if (disabled) {
+        // 2x2 진입: 현재 선택값 백업 후 전부 해제
+        if (savedAIFeaturesFor2x2 === null) {
+            savedAIFeaturesFor2x2 = new Set(selectedAIFeatures);
+        }
+        selectedAIFeatures.clear();
+    } else {
+        // 싱글 복귀: 백업값 복원
+        if (savedAIFeaturesFor2x2 !== null) {
+            selectedAIFeatures = new Set(savedAIFeaturesFor2x2);
+            savedAIFeaturesFor2x2 = null;
+        }
+    }
+
+    document.querySelectorAll('.ai-btn').forEach(btn => {
+        btn.disabled = disabled;
+        btn.classList.toggle('btn-disabled', disabled);
+    });
+
+    const featureLabel = document.getElementById('ai-feature-label');
+    if (featureLabel && disabled) {
+        featureLabel.textContent = '2×2 모드 (AI 미지원)';
+    } else if (featureLabel) {
+        featureLabel.textContent = getAIFeaturesLabel(selectedAIFeatures);
+    }
+
+    updateAIFeatureUI();
+}
+
+function updateAIRects() {
+    const container = document.getElementById('ai-rects-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (displayedMode === '2x2') return;
+
+    const selected = AI_RECT_ORDER.filter(f => selectedAIFeatures.has(f));
+    selected.forEach((feature, idx) => {
+        const cfg = AI_RECT_CONFIG[feature];
+        const rect = document.createElement('div');
+        rect.className = 'ai-rect';
+        rect.style.borderColor = cfg.color;
+        const overlay = document.getElementById('video-overlay');
+        const overlayH = (overlay && currentProtocol !== 'webrtc') ? overlay.offsetHeight : 48;
+        rect.style.top   = `${overlayH + AI_RECT_MARGIN_TOP}px`;
+        rect.style.right = `${AI_RECT_RIGHT + idx * (AI_RECT_WIDTH + AI_RECT_GAP)}px`;
+
+        const label = document.createElement('span');
+        label.className = 'ai-rect-label';
+        label.style.color = cfg.color;
+        label.textContent = cfg.label;
+        rect.appendChild(label);
+        container.appendChild(rect);
+    });
+}
+
+function selectAIFeature(feature) {
+    if (!isSupportedAIFeature(feature)) {
+        return;
+    }
+    if (selectedAIFeatures.has(feature)) {
+        selectedAIFeatures.delete(feature);
+    } else {
+        selectedAIFeatures.add(feature);
+    }
+    window.localStorage.setItem('selectedAIFeatures', JSON.stringify([...selectedAIFeatures]));
+    updateAIFeatureUI();
+    syncBrowserUrl();
 }
 
 function detachHLSPlayer() {
@@ -524,6 +771,40 @@ function startStream() {
     reconnectForCurrentMode();
 }
 
+function startStreamWhenReady() {
+    const startedAt = Date.now();
+    showPlaceholder('서버 연결 중...', '파이프라인이 준비될 때까지 대기합니다.');
+    updateStatus('서버 연결 중...', 'loading');
+
+    const poll = async () => {
+        const status = await fetchServerStatus();
+        const pipelineState = status?.pipeline_state || 'unknown';
+        const streamReady = Boolean(status?.stream_ready);
+        const timedOut = Date.now() - startedAt >= CONFIG.probeTimeoutMs;
+
+        if (status && isSupportedMode(status.mode)) {
+            syncModeStateFromStatus(status);
+        }
+
+        if (pipelineState === 'running' && streamReady) {
+            clearStreamProbe();
+            startStream();
+            return;
+        }
+
+        if (pipelineState === 'error' || timedOut) {
+            clearStreamProbe();
+            showPlaceholder('서버 연결 실패', '페이지를 새로고침하거나 서버 상태를 확인하세요.');
+            updateStatus('서버 연결 실패', 'error');
+            return;
+        }
+
+        streamReadyProbeTimer = setTimeout(poll, CONFIG.probeIntervalMs);
+    };
+
+    streamReadyProbeTimer = setTimeout(poll, CONFIG.probeIntervalMs);
+}
+
 function updateProtocolButtons() {
     document.getElementById('btn-hls').classList.toggle('active', currentProtocol === 'hls');
     document.getElementById('btn-webrtc').classList.toggle('active', currentProtocol === 'webrtc');
@@ -545,6 +826,7 @@ function switchToHLS() {
     }
 
     startHLS();
+    updateAIRects();
 }
 
 function switchToWebRTC() {
@@ -563,6 +845,7 @@ function switchToWebRTC() {
     }
 
     startWebRTC();
+    updateAIRects();
 }
 
 function updateModeUI() {
@@ -599,6 +882,8 @@ function updateModeUI() {
             modeDisplay.textContent = `현재 모드: ${modeNames[displayedMode] || displayedMode}`;
         }
     }
+
+    updateAIToolbarForMode(displayedMode);
 }
 
 async function switchMode(mode) {
@@ -817,3 +1102,4 @@ function updateInfoBox() {
 window.switchToHLS = switchToHLS;
 window.switchToWebRTC = switchToWebRTC;
 window.switchMode = switchMode;
+window.selectAIFeature = selectAIFeature;

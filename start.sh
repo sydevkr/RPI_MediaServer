@@ -2,6 +2,10 @@
 
 # RPI_MediaServer Startup Script
 
+# Always run from this script's directory so relative paths (./web, ./build, ./config.ini) are stable.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 MEDIAMTX_BIN=${MEDIAMTX_BIN:-/usr/local/bin/mediamtx}
 MEDIAMTX_CONF=${MEDIAMTX_CONF:-./mediamtx.yml}
 SERVER_BIN=${SERVER_BIN:-./build/RPI_MediaServer}
@@ -96,16 +100,53 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-pkill -f './build/RPI_MediaServer ./config.ini' || true
-echo "Killing RPI_MediaServer"
-sleep 1
+# Stop any previously running server process (match exact process name only)
+OLD_PIDS=$(pgrep -x 'RPI_MediaServer' || true)
+if [ -n "$OLD_PIDS" ]; then
+    echo "Stopping existing RPI_MediaServer: $OLD_PIDS"
+    kill $OLD_PIDS || true
+    sleep 1
+    # Force kill if still alive
+    REMAIN_PIDS=$(pgrep -x 'RPI_MediaServer' || true)
+    if [ -n "$REMAIN_PIDS" ]; then
+        echo "Force stopping remaining RPI_MediaServer: $REMAIN_PIDS"
+        kill -9 $REMAIN_PIDS || true
+        sleep 1
+    fi
+else
+    echo "No existing RPI_MediaServer process found"
+fi
 
-# Check MediaMTX service state
+# Check/start MediaMTX service state
 if ! pgrep -x mediamtx >/dev/null 2>&1; then
-    echo -e "${RED}✗ MediaMTX is not running${NC}"
-    echo "Please start it with: sudo systemctl start mediamtx"
-    echo "Or enable it on boot with: sudo systemctl enable --now mediamtx"
-    exit 1
+    echo -e "${YELLOW}⚠ MediaMTX is not running. Trying to start...${NC}"
+
+    if [ "$EUID" -eq 0 ]; then
+        systemctl start mediamtx || true
+    else
+        echo -e "${BLUE}▶ Starting MediaMTX via sudo (password may be required)...${NC}"
+        sudo systemctl start mediamtx || {
+            echo -e "${RED}✗ Failed to start MediaMTX automatically${NC}"
+            echo "Please run manually: sudo systemctl start mediamtx"
+            exit 1
+        }
+    fi
+
+    echo -e "${BLUE}▶ Waiting for MediaMTX to become ready...${NC}"
+    MTX_READY=0
+    for i in {1..10}; do
+        if pgrep -x mediamtx >/dev/null 2>&1; then
+            MTX_READY=1
+            break
+        fi
+        sleep 1
+    done
+
+    if [ "$MTX_READY" -ne 1 ]; then
+        echo -e "${RED}✗ MediaMTX did not start within timeout${NC}"
+        echo "Check status: sudo systemctl status mediamtx"
+        exit 1
+    fi
 fi
 echo -e "${GREEN}✓ MediaMTX service is running${NC}"
 
