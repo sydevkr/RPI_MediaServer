@@ -91,6 +91,7 @@ void Pipeline::shutdown() {
     codecpar_ = nullptr;
     video_stream_idx_ = -1;
     initialized_ = false;
+    pts_2x2_ = 0;
 
     logger::info("Pipeline shutdown complete");
 }
@@ -408,14 +409,17 @@ bool Pipeline::init_filter_graph_2x2() {
     std::string fps_str = std::to_string(cfg_.fps);
     
     // 1. USB 입력 버퍼 소스 생성
+    // time_base를 1/fps로 설정해 color 필터(r=fps)와 PTS 단위를 통일
+    // V4L2 원본 타임스탬프(시스템 부팅 기준 절대시각)를 그대로 쓰면
+    // color 필터(PTS=0 시작)와 수천만 프레임 차이가 생겨 xstack이 블로킹됨
     char args[512];
+    const int sar_num = (codecpar_->sample_aspect_ratio.num > 0) ? codecpar_->sample_aspect_ratio.num : 1;
+    const int sar_den = (codecpar_->sample_aspect_ratio.den > 0) ? codecpar_->sample_aspect_ratio.den : 1;
     snprintf(args, sizeof(args),
-             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             "video_size=%dx%d:pix_fmt=%d:time_base=1/%d:pixel_aspect=%d/%d",
              decoder_ctx_->width, decoder_ctx_->height, decoder_ctx_->pix_fmt,
-             input_ctx_->streams[video_stream_idx_]->time_base.num,
-             input_ctx_->streams[video_stream_idx_]->time_base.den,
-             codecpar_->sample_aspect_ratio.num, 
-             codecpar_->sample_aspect_ratio.den);
+             cfg_.fps,
+             sar_num, sar_den);
     
     if (avfilter_graph_create_filter(&buffersrc_ctx_, buffersrc, "usb_in", args, 
                                       nullptr, filter_graph_.get()) < 0) {
@@ -693,8 +697,15 @@ FramePtr Pipeline::capture() {
                 continue;
             }
             
+            // 2x2 모드: buffersrc time_base(1/fps)와 일치하도록 PTS 정규화
+            // V4L2 원본 PTS(시스템 부팅 기준 절대시각)를 그대로 사용하면
+            // color 필터(PTS=0 시작)와 PTS 불일치로 xstack이 장시간 블로킹됨
+            if (cfg_.video_mode == utils::VideoMode::MIXING_2X2) {
+                frame->pts = pts_2x2_++;
+            }
+
             // 필터 그래프에 프레임 추가
-            if (av_buffersrc_add_frame_flags(buffersrc_ctx_, frame.get(), 
+            if (av_buffersrc_add_frame_flags(buffersrc_ctx_, frame.get(),
                                               AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
                 logger::warn("Failed to add frame to buffer source");
                 continue;

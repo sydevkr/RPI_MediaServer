@@ -284,6 +284,7 @@ private:
     time_t framebuffer_snapshot_mtime_ = 0; ///< 캐시된 스냅샷 mtime
     
     bool initialized_ = false;         ///< 초기화 완료 플래그
+    int64_t pts_2x2_ = 0;             ///< 2x2 모드 USB 입력 PTS 카운터 (color 필터와 동기화)
 };
 
 } // namespace pipeline
